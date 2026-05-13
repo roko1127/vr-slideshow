@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>3DGS SLIDESHOW / VR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --fg: #e8e8e8;
+    --dim: #555;
+    --accent: #d4ff00;
+    --accent-dim: #4d5e00;
+    --danger: #ff3860;
+    --border: #1f1f1f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: 'M PLUS 1 Code', monospace;
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 100;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  /* ─── Setup overlay ─── */
+  #setup {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    overflow-y: auto;
+  }
+  #setup.hidden { display: none; }
+  .panel {
+    width: 100%; max-width: 560px;
+    border: 1px solid var(--border);
+    padding: 32px;
+    background: rgba(15,15,15,0.92);
+    backdrop-filter: blur(8px);
+  }
+  .title {
+    font-size: 13px; letter-spacing: 0.3em;
+    color: var(--dim); margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+  .heading {
+    font-size: 28px; font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+  .heading .acc { color: var(--accent); }
+  .subheading {
+    font-size: 12px; color: var(--dim);
+    margin-bottom: 32px;
+    line-height: 1.6;
+  }
+  .section { margin-bottom: 24px; }
+  .label {
+    font-size: 11px; letter-spacing: 0.2em;
+    color: var(--accent); margin-bottom: 10px;
+    text-transform: uppercase;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .label::after {
+    content: ''; flex: 1; height: 1px;
+    background: var(--accent-dim);
+  }
+  .drop {
+    border: 1px dashed var(--dim);
+    padding: 24px; text-align: center;
+    cursor: pointer; transition: all 0.15s ease;
+    font-size: 13px; color: var(--fg);
+    user-select: none;
+  }
+  .drop:hover, .drop.dragover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(212,255,0,0.04);
+  }
+  .drop .hint {
+    font-size: 10px; color: var(--dim); margin-top: 6px;
+    letter-spacing: 0.1em;
+  }
+  .drop:hover .hint, .drop.dragover .hint {
+    color: var(--accent-dim);
+  }
+  #splat-list {
+    list-style: none; margin-top: 12px;
+    max-height: 180px; overflow-y: auto;
+  }
+  #splat-list li {
+    display: flex; align-items: center;
+    padding: 8px 12px;
+    border-left: 2px solid var(--accent-dim);
+    margin-bottom: 4px;
+    font-size: 12px;
+    background: rgba(255,255,255,0.02);
+  }
+  #splat-list li .idx {
+    color: var(--accent);
+    margin-right: 12px;
+    min-width: 24px;
+  }
+  #splat-list li .name {
+    flex: 1; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  #splat-list li .size {
+    color: var(--dim); margin-right: 12px;
+    font-size: 10px;
+  }
+  #splat-list li button {
+    background: none; border: none;
+    color: var(--dim); cursor: pointer;
+    font-family: inherit; font-size: 14px;
+    padding: 0 6px;
+  }
+  #splat-list li button:hover { color: var(--danger); }
+  #audio-status {
+    margin-top: 10px; font-size: 11px;
+    color: var(--accent); padding-left: 12px;
+    border-left: 2px solid var(--accent-dim);
+  }
+  .controls-row {
+    display: flex; gap: 16px; align-items: center;
+  }
+  .controls-row label {
+    font-size: 12px; color: var(--dim);
+  }
+  input[type=number] {
+    background: transparent; color: var(--accent);
+    border: none; border-bottom: 1px solid var(--dim);
+    font-family: inherit; font-size: 14px;
+    width: 60px; padding: 4px 0;
+    text-align: center;
+  }
+  input[type=number]:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .start-btn {
+    width: 100%; padding: 16px;
+    background: var(--accent); color: var(--bg);
+    border: none; cursor: pointer;
+    font-family: inherit; font-weight: 700;
+    font-size: 13px; letter-spacing: 0.3em;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+  }
+  .start-btn:hover:not(:disabled) {
+    background: var(--fg);
+    transform: translateX(2px);
+  }
+  .start-btn:disabled {
+    background: var(--border); color: var(--dim);
+    cursor: not-allowed;
+  }
+  .note {
+    margin-top: 20px; padding: 12px;
+    border-left: 2px solid var(--accent-dim);
+    font-size: 10px; color: var(--dim);
+    line-height: 1.7;
+    background: rgba(212,255,0,0.02);
+  }
+  .note b { color: var(--accent); font-weight: 500; }
+
+  /* ─── Viewer & HUD ─── */
+  #viewer-container {
+    position: fixed; inset: 0; z-index: 1;
+  }
+  #viewer-container canvas {
+    display: block;
+  }
+  #hud {
+    position: fixed; top: 16px; right: 16px;
+    z-index: 20;
+    border: 1px solid var(--border);
+    background: rgba(10,10,10,0.85);
+    backdrop-filter: blur(6px);
+    padding: 12px 16px;
+    font-size: 12px;
+    min-width: 180px;
+  }
+  #hud.hidden { display: none; }
+  #hud .row {
+    display: flex; justify-content: space-between;
+    align-items: center; margin-bottom: 8px;
+  }
+  #hud .row:last-child { margin-bottom: 0; }
+  #hud .key { color: var(--dim); font-size: 10px; letter-spacing: 0.1em; }
+  #hud .val { color: var(--accent); }
+  #hud .name {
+    font-size: 11px; color: var(--fg);
+    margin-top: 4px; padding-top: 8px;
+    border-top: 1px solid var(--border);
+    overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; max-width: 200px;
+  }
+  #hud .buttons {
+    display: flex; gap: 6px; margin-top: 10px;
+    padding-top: 10px; border-top: 1px solid var(--border);
+  }
+  #hud button {
+    flex: 1; padding: 6px 8px;
+    background: transparent; color: var(--fg);
+    border: 1px solid var(--border);
+    cursor: pointer; font-family: inherit;
+    font-size: 10px; letter-spacing: 0.15em;
+    text-transform: uppercase;
+    transition: all 0.15s;
+  }
+  #hud button:hover {
+    border-color: var(--accent); color: var(--accent);
+  }
+  #hud button.danger:hover {
+    border-color: var(--danger); color: var(--danger);
+  }
+  #progress {
+    height: 2px; background: var(--border);
+    margin-top: 10px; overflow: hidden;
+  }
+  #progress-bar {
+    height: 100%; width: 0; background: var(--accent);
+    transition: width 0.1s linear;
+  }
+
+  /* ─── Toast ─── */
+  #toast {
+    position: fixed; bottom: 80px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    padding: 12px 20px;
+    border: 1px solid var(--danger);
+    background: rgba(10,10,10,0.95);
+    color: var(--danger);
+    font-size: 12px; letter-spacing: 0.1em;
+    opacity: 0; transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+
+  /* ─── Library's VR button styling override ─── */
+  /* The library injects its own button; we leave it but tweak position */
+
+  @media (max-width: 600px) {
+    .panel { padding: 24px 20px; }
+    .heading { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <div class="panel">
+    <div class="title">▸ WebXR / Gaussian Splatting</div>
+    <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
+    <p class="subheading">複数の.splatをVRでスライドショー再生 — Quest 3 ブラウザで動きます</p>
+
+    <div class="section">
+      <div class="label">01 ▸ Splat Files</div>
+      <div class="drop" id="splat-drop">
+        ⬆ ドラッグ&ドロップ or クリックで選択
+        <div class="hint">.splat / .ply / .ksplat</div>
+      </div>
+      <ul id="splat-list"></ul>
+    </div>
+
+    <div class="section">
+      <div class="label">02 ▸ BGM <span style="color:var(--dim); letter-spacing:0">(任意)</span></div>
+      <div class="drop" id="audio-drop">
+        ⬆ 音楽ファイルをドロップ
+        <div class="hint">.mp3 / .wav / .ogg / .m4a</div>
+      </div>
+      <div id="audio-status" style="display:none"></div>
+    </div>
+
+    <div class="section">
+      <div class="label">03 ▸ Settings</div>
+      <div class="controls-row">
+        <label>切替間隔</label>
+        <input type="number" id="interval" value="10" min="2" max="600">
+        <label>秒</label>
+      </div>
+    </div>
+
+    <button class="start-btn" id="start-btn" disabled>▶ START SLIDESHOW</button>
+
+    <div class="note">
+      <b>使い方:</b><br>
+      ① ファイルを揃えて START<br>
+      ② 画面下に出る <b>ENTER VR</b> をクリックでVRモード<br>
+      ③ Quest 3のブラウザで直接URLを開くのが理想<br><br>
+      <b>注意:</b> WebXRは <b>HTTPS</b> か <b>localhost</b> 必須。ローカルで試すなら <code style="color:var(--accent)">python -m http.server</code> 等で起動してください。
+    </div>
+  </div>
+</div>
+
+<div id="viewer-container"></div>
+
+<div id="hud" class="hidden">
+  <div class="row">
+    <span class="key">SLIDE</span>
+    <span class="val" id="slide-counter">0 / 0</span>
+  </div>
+  <div class="row">
+    <span class="key">NEXT</span>
+    <span class="val" id="next-timer">--s</span>
+  </div>
+  <div id="progress"><div id="progress-bar"></div></div>
+  <div class="name" id="current-name"></div>
+  <div class="buttons">
+    <button id="next-btn">⏭ NEXT</button>
+    <button id="pause-btn">⏸ PAUSE</button>
+    <button id="end-btn" class="danger">✕ END</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "@mkkellogg/gaussian-splats-3d": "https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import * as GaussianSplats3D from '@mkkellogg/gaussian-splats-3d';
+
+// ─── State ───────────────────────────────────────────────
+let viewer = null;
+let splatFiles = [];
+let audioFile = null;
+let audio = null;
+let intervalSec = 10;
+let currentIndex = -1;
+let timer = null;
+let progressRAF = null;
+let timerStartedAt = 0;
+let isRunning = false;
+let isPaused = false;
+let hasScene = false;
+let isLoading = false;
+
+// ─── DOM refs ────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const setupEl = $('setup');
+const splatDropEl = $('splat-drop');
+const audioDropEl = $('audio-drop');
+const intervalEl = $('interval');
+const startBtn = $('start-btn');
+const splatListEl = $('splat-list');
+const audioStatusEl = $('audio-status');
+const hudEl = $('hud');
+const slideCounterEl = $('slide-counter');
+const nextTimerEl = $('next-timer');
+const progressBarEl = $('progress-bar');
+const currentNameEl = $('current-name');
+const endBtn = $('end-btn');
+const nextBtn = $('next-btn');
+const pauseBtn = $('pause-btn');
+const viewerContainerEl = $('viewer-container');
+const toastEl = $('toast');
+
+// ─── Drop zones ──────────────────────────────────────────
+function setupDropZone(el, accept, filterFn, onFiles, multiple = true) {
+  el.addEventListener('dragover', e => {
+    e.preventDefault();
+    el.classList.add('dragover');
+  });
+  el.addEventListener('dragleave', () => el.classList.remove('dragover'));
+  el.addEventListener('drop', e => {
+    e.preventDefault();
+    el.classList.remove('dragover');
+    const files = Array.from(e.dataTransfer.files).filter(filterFn);
+    if (files.length) onFiles(files);
+  });
+  el.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = multiple;
+    input.accept = accept;
+    input.onchange = () => {
+      const files = Array.from(input.files).filter(filterFn);
+      if (files.length) onFiles(files);
+    };
+    input.click();
+  });
+}
+
+setupDropZone(
+  splatDropEl,
+  '.splat,.ply,.ksplat',
+  f => /\.(splat|ply|ksplat)$/i.test(f.name),
+  files => {
+    splatFiles = [...splatFiles, ...files];
+    renderSplatList();
+    updateStartBtn();
+  },
+  true
+);
+
+setupDropZone(
+  audioDropEl,
+  'audio/*',
+  f => f.type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|flac)$/i.test(f.name),
+  files => {
+    audioFile = files[0];
+    audioStatusEl.textContent = `♪ ${audioFile.name}`;
+    audioStatusEl.style.display = 'block';
+  },
+  false
+);
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + 'B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(0) + 'KB';
+  return (bytes/1024/1024).toFixed(1) + 'MB';
+}
+
+function renderSplatList() {
+  splatListEl.innerHTML = '';
+  splatFiles.forEach((f, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <span class="idx">${String(i+1).padStart(2,'0')}</span>
+      <span class="name">${f.name}</span>
+      <span class="size">${formatSize(f.size)}</span>
+      <button title="削除">×</button>
+    `;
+    li.querySelector('button').onclick = () => {
+      splatFiles.splice(i, 1);
+      renderSplatList();
+      updateStartBtn();
+    };
+    splatListEl.appendChild(li);
+  });
+}
+
+function updateStartBtn() {
+  startBtn.disabled = splatFiles.length === 0;
+}
+
+// ─── Toast ───────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3000);
+}
+
+// ─── Splat format detection ──────────────────────────────
+function detectFormat(filename) {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.ply')) return GaussianSplats3D.SceneFormat.Ply;
+  if (lower.endsWith('.ksplat')) return GaussianSplats3D.SceneFormat.KSplat;
+  return GaussianSplats3D.SceneFormat.Splat;
+}
+
+// ─── Slideshow control ───────────────────────────────────
+async function startSlideshow() {
+  intervalSec = Math.max(2, parseInt(intervalEl.value, 10) || 10);
+
+  setupEl.classList.add('hidden');
+  hudEl.classList.remove('hidden');
+
+  try {
+    viewer = new GaussianSplats3D.Viewer({
+      rootElement: viewerContainerEl,
+      cameraUp: [0, -1, 0],
+      initialCameraPosition: [0, 1, 4],
+      initialCameraLookAt: [0, 0, 0],
+      webXRMode: GaussianSplats3D.WebXRMode.VR,
+      sharedMemoryForWorkers: false,
+      selfDrivenMode: true,
+      useBuiltInControls: true,
+      ignoreDevicePixelRatio: false,
+      gpuAcceleratedSort: true,
+      enableSIMDInSort: true,
+      dynamicScene: false,
+      antialiased: false,
+      focalAdjustment: 1.0,
+      logLevel: GaussianSplats3D.LogLevel.None,
+      sphericalHarmonicsDegree: 0,
+    });
+  } catch (e) {
+    console.error(e);
+    showToast('Viewer初期化失敗');
+    endSlideshow();
+    return;
+  }
+
+  // Start audio (user gesture available now)
+  if (audioFile) {
+    audio = new Audio(URL.createObjectURL(audioFile));
+    audio.loop = true;
+    audio.volume = 0.7;
+    audio.play().catch(e => {
+      console.warn('Audio play:', e);
+      showToast('音楽再生失敗 - autoplay制限の可能性');
+    });
+  }
+
+  isRunning = true;
+  isPaused = false;
+
+  await loadSlide(0);
+  viewer.start();
+  scheduleNext();
+}
+
+async function loadSlide(index) {
+  if (isLoading || !viewer) return;
+  isLoading = true;
+
+  // Remove previous scene
+  if (hasScene) {
+    try {
+      await viewer.removeSplatScene(0);
+    } catch (e) {
+      console.warn('removeSplatScene:', e);
+    }
+    hasScene = false;
+  }
+
+  currentIndex = ((index % splatFiles.length) + splatFiles.length) % splatFiles.length;
+  const file = splatFiles[currentIndex];
+  if (!file) { isLoading = false; return; }
+
+  currentNameEl.textContent = file.name;
+  updateHUD();
+
+  const url = URL.createObjectURL(file);
+  try {
+    await viewer.addSplatScene(url, {
+      format: detectFormat(file.name),
+      progressiveLoad: false,
+      showLoadingUI: false,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0, 1],
+      scale: [1, 1, 1],
+    });
+    hasScene = true;
+  } catch (e) {
+    console.error('Splat load failed:', e);
+    showToast(`読み込み失敗: ${file.name}`);
+  } finally {
+    URL.revokeObjectURL(url);
+    isLoading = false;
+  }
+}
+
+function scheduleNext() {
+  clearTimeout(timer);
+  cancelAnimationFrame(progressRAF);
+  if (!isRunning || isPaused) return;
+
+  timerStartedAt = performance.now();
+  const duration = intervalSec * 1000;
+
+  const tick = () => {
+    if (!isRunning || isPaused) return;
+    const elapsed = performance.now() - timerStartedAt;
+    const remaining = Math.max(0, duration - elapsed);
+    progressBarEl.style.width = `${(elapsed / duration) * 100}%`;
+    nextTimerEl.textContent = `${Math.ceil(remaining / 1000)}s`;
+    if (remaining > 0) progressRAF = requestAnimationFrame(tick);
+  };
+  progressRAF = requestAnimationFrame(tick);
+
+  timer = setTimeout(async () => {
+    if (!isRunning || isPaused) return;
+    await loadSlide(currentIndex + 1);
+    scheduleNext();
+  }, duration);
+}
+
+async function manualNext() {
+  if (!isRunning) return;
+  clearTimeout(timer);
+  cancelAnimationFrame(progressRAF);
+  await loadSlide(currentIndex + 1);
+  if (!isPaused) scheduleNext();
+}
+
+function togglePause() {
+  if (!isRunning) return;
+  isPaused = !isPaused;
+  pauseBtn.textContent = isPaused ? '▶ RESUME' : '⏸ PAUSE';
+  if (audio) {
+    if (isPaused) audio.pause(); else audio.play().catch(()=>{});
+  }
+  if (isPaused) {
+    clearTimeout(timer);
+    cancelAnimationFrame(progressRAF);
+  } else {
+    scheduleNext();
+  }
+}
+
+function endSlideshow() {
+  isRunning = false;
+  isPaused = false;
+  clearTimeout(timer);
+  cancelAnimationFrame(progressRAF);
+
+  if (audio) {
+    try { audio.pause(); } catch(e){}
+    audio = null;
+  }
+  if (viewer) {
+    try {
+      // Exit XR session if active
+      if (viewer.renderer && viewer.renderer.xr && viewer.renderer.xr.getSession) {
+        const session = viewer.renderer.xr.getSession();
+        if (session) session.end().catch(()=>{});
+      }
+      viewer.dispose();
+    } catch (e) {
+      console.warn('dispose:', e);
+    }
+    viewer = null;
+  }
+  hasScene = false;
+  currentIndex = -1;
+  viewerContainerEl.innerHTML = '';
+
+  hudEl.classList.add('hidden');
+  setupEl.classList.remove('hidden');
+  pauseBtn.textContent = '⏸ PAUSE';
+  progressBarEl.style.width = '0%';
+}
+
+function updateHUD() {
+  slideCounterEl.textContent = `${currentIndex + 1} / ${splatFiles.length}`;
+}
+
+// ─── Wire up buttons ─────────────────────────────────────
+startBtn.addEventListener('click', startSlideshow);
+endBtn.addEventListener('click', endSlideshow);
+nextBtn.addEventListener('click', manualNext);
+pauseBtn.addEventListener('click', togglePause);
+
+// Keyboard shortcuts (when not in VR)
+window.addEventListener('keydown', e => {
+  if (!isRunning) return;
+  if (e.key === 'ArrowRight' || e.key === 'n') manualNext();
+  else if (e.key === ' ') { e.preventDefault(); togglePause(); }
+  else if (e.key === 'Escape') endSlideshow();
+});
+
+// Prevent accidental drag-drop on the whole window
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
+// Check WebXR availability and warn if not present
+if (!navigator.xr) {
+  console.warn('WebXR not available — VR button will not work, but desktop preview still functions.');
+} else {
+  navigator.xr.isSessionSupported('immersive-vr').then(supported => {
+    if (!supported) {
+      console.warn('immersive-vr session not supported on this device.');
+    }
+  });
+}
+</script>
+
+</body>
+</html>
