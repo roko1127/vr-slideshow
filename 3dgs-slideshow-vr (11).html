@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>3DGS SLIDESHOW / VR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0a0a;--fg:#e8e8e8;--dim:#555;
+    --accent:#d4ff00;--accent-dim:#4d5e00;
+    --danger:#ff3860;--border:#1f1f1f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    width:100%;height:100%;overflow:hidden;
+    background:var(--bg);color:var(--fg);
+    font-family:'M PLUS 1 Code',monospace;
+    -webkit-font-smoothing:antialiased;
+  }
+  body::before{
+    content:'';position:fixed;inset:0;pointer-events:none;z-index:100;
+    background-image:
+      linear-gradient(rgba(255,255,255,.012) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.012) 1px,transparent 1px);
+    background-size:32px 32px;
+  }
+  #setup{
+    position:fixed;inset:0;z-index:10;
+    display:flex;align-items:flex-start;justify-content:center;
+    padding:24px;overflow-y:auto;
+  }
+  #setup.hidden{display:none}
+  .panel{
+    width:100%;max-width:920px;
+    border:2px solid var(--border);padding:48px;
+    background:rgba(15,15,15,.92);backdrop-filter:blur(8px);
+    margin:auto;
+  }
+  .title{font-size:20px;letter-spacing:.3em;color:var(--dim);margin-bottom:8px;text-transform:uppercase}
+  .heading{font-size:48px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px}
+  .heading .acc{color:var(--accent)}
+  .subheading{font-size:20px;color:var(--dim);margin-bottom:6px;line-height:1.6}
+  .engine-tag{
+    display:inline-block;font-size:16px;letter-spacing:.2em;
+    color:var(--accent);border:1px solid var(--accent-dim);
+    padding:4px 10px;margin-bottom:36px;
+  }
+  .section{margin-bottom:32px}
+  .label{
+    font-size:18px;letter-spacing:.2em;color:var(--accent);margin-bottom:16px;
+    text-transform:uppercase;display:flex;align-items:baseline;gap:12px;
+  }
+  .label::after{content:'';flex:1;height:1px;background:var(--accent-dim)}
+  .drop{
+    border:2px dashed var(--dim);padding:32px;text-align:center;
+    cursor:pointer;transition:all .15s;font-size:22px;color:var(--fg);user-select:none;
+  }
+  .drop:hover,.drop.dragover{border-color:var(--accent);color:var(--accent);background:rgba(212,255,0,.04)}
+  .drop .hint{font-size:16px;color:var(--dim);margin-top:10px;letter-spacing:.1em}
+  .drop:hover .hint,.drop.dragover .hint{color:var(--accent-dim)}
+  #splat-list{list-style:none;margin-top:16px;max-height:240px;overflow-y:auto}
+  #splat-list li{
+    display:flex;align-items:center;padding:12px 16px;
+    border-left:3px solid var(--accent-dim);margin-bottom:6px;
+    font-size:18px;background:rgba(255,255,255,.02);
+  }
+  #splat-list li .idx{color:var(--accent);margin-right:16px;min-width:36px}
+  #splat-list li .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #splat-list li .size{color:var(--dim);margin-right:16px;font-size:16px}
+  #splat-list li button{background:none;border:none;color:var(--dim);cursor:pointer;font-family:inherit;font-size:22px;padding:0 8px}
+  #splat-list li button:hover{color:var(--danger)}
+  #audio-status{margin-top:14px;font-size:18px;color:var(--accent);padding-left:16px;border-left:3px solid var(--accent-dim)}
+  .settings-grid{display:grid;gap:14px}
+  .s-row{display:flex;align-items:center;gap:12px}
+  .s-key{color:var(--dim);font-size:16px;letter-spacing:.1em;min-width:110px;text-transform:uppercase}
+  .s-row input[type=range]{flex:1;accent-color:var(--accent);cursor:pointer;height:10px;padding:0;border:none;background:var(--border)}
+  .s-val{color:var(--accent);font-size:18px;min-width:54px;text-align:right}
+  /* Step buttons for sliders */
+  .step-btn{
+    width:40px;height:40px;background:transparent;border:1px solid var(--border);
+    color:var(--fg);cursor:pointer;font-family:inherit;font-size:22px;font-weight:700;
+    padding:0;flex-shrink:0;transition:all .1s;line-height:1;
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+  .step-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .step-btn:active{background:rgba(212,255,0,.15)}
+  /* Anim rows: two sliders (start/end) */
+  .anim-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .anim-key{color:var(--dim);font-size:16px;letter-spacing:.1em;min-width:110px;text-transform:uppercase}
+  .anim-label{font-size:14px;color:var(--dim);min-width:40px;text-align:center;letter-spacing:.05em}
+  .anim-row input[type=range]{flex:1;min-width:80px;accent-color:var(--accent);cursor:pointer;height:10px;padding:0;border:none;background:var(--border)}
+  .anim-val{color:var(--accent);font-size:16px;min-width:48px;text-align:right}
+  .anim-arrow{color:var(--dim);font-size:18px;padding:0 4px}
+  .controls-row{display:flex;gap:20px;align-items:center}
+  .controls-row label{font-size:20px;color:var(--dim)}
+  input[type=number]{
+    background:transparent;color:var(--accent);border:none;
+    border-bottom:2px solid var(--dim);font-family:inherit;
+    font-size:24px;width:90px;padding:6px 0;text-align:center;
+  }
+  input[type=number]:focus{outline:none;border-color:var(--accent)}
+  input[type=checkbox]{width:22px;height:22px;cursor:pointer}
+  input[type=color]{width:60px;height:40px;border:1px solid var(--dim);background:transparent;cursor:pointer;padding:2px}
+  .vr-btn{
+    width:100%;padding:26px;background:var(--accent);color:var(--bg);
+    border:none;cursor:pointer;font-family:inherit;font-weight:700;
+    font-size:22px;letter-spacing:.3em;transition:all .15s;text-transform:uppercase;
+    margin-top:32px;
+  }
+  .vr-btn:hover:not(:disabled){background:var(--fg)}
+  .vr-btn:disabled{background:var(--border);color:var(--dim);cursor:not-allowed}
+  .note{
+    margin-top:24px;padding:18px;border-left:3px solid var(--accent-dim);
+    font-size:16px;color:var(--dim);line-height:1.8;background:rgba(212,255,0,.02);
+  }
+  .note b{color:var(--accent);font-weight:500}
+  /* select dropdown */
+  select{
+    background:transparent;color:var(--accent);
+    border:1px solid var(--dim);font-family:inherit;
+    font-size:16px;padding:8px 10px;cursor:pointer;
+  }
+  select:focus{outline:none;border-color:var(--accent)}
+  #viewer-container{position:fixed;inset:0;z-index:1}
+  #viewer-container canvas{display:block;width:100%;height:100%}
+  #hud{
+    position:fixed;top:16px;right:16px;z-index:20;
+    border:1px solid var(--border);background:rgba(10,10,10,.88);
+    backdrop-filter:blur(6px);padding:12px 16px;font-size:12px;min-width:200px;
+  }
+  #hud.hidden{display:none}
+  #hud .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  #hud .key{color:var(--dim);font-size:10px;letter-spacing:.1em}
+  #hud .val{color:var(--accent)}
+  #hud .name{
+    font-size:11px;color:var(--fg);margin-top:4px;padding-top:8px;
+    border-top:1px solid var(--border);overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;max-width:200px;
+  }
+  #hud .buttons{
+    display:grid;grid-template-columns:1fr 1fr;gap:6px;
+    margin-top:10px;padding-top:10px;border-top:1px solid var(--border);
+  }
+  #hud button{
+    padding:6px 8px;background:transparent;color:var(--fg);
+    border:1px solid var(--border);cursor:pointer;font-family:inherit;
+    font-size:10px;letter-spacing:.1em;text-transform:uppercase;transition:all .15s;
+  }
+  #hud button:hover{border-color:var(--accent);color:var(--accent)}
+  #hud button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent);grid-column:1/-1}
+  #hud button.primary:hover{background:var(--fg);border-color:var(--fg);color:var(--bg)}
+  #hud button.danger:hover{border-color:var(--danger);color:var(--danger)}
+  #progress{height:2px;background:var(--border);margin-top:10px;overflow:hidden}
+  #progress-bar{height:100%;width:0;background:var(--accent);transition:width .1s linear}
+  #toast{
+    position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:30;
+    padding:12px 20px;border:1px solid var(--danger);
+    background:rgba(10,10,10,.95);color:var(--danger);
+    font-size:12px;letter-spacing:.1em;opacity:0;transition:opacity .3s;
+    pointer-events:none;max-width:80vw;
+  }
+  #toast.show{opacity:1}
+  #toast.info{border-color:var(--accent);color:var(--accent)}
+  #loading{
+    position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    z-index:15;color:var(--accent);font-size:14px;letter-spacing:.3em;
+    text-transform:uppercase;padding:20px 30px;
+    border:1px solid var(--accent-dim);background:rgba(10,10,10,.9);display:none;
+  }
+  #loading.show{display:block}
+  #loading .pulse{display:inline-block;width:8px;height:8px;background:var(--accent);margin-right:10px;animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  @media(max-width:900px){.panel{padding:30px 20px;max-width:100%}.heading{font-size:36px}.drop{font-size:18px;padding:24px}.label{font-size:16px}}
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <div class="panel">
+    <div class="title">▸ WebXR / Gaussian Splatting</div>
+    <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
+    <p class="subheading">Quest 3 VRスライドショー</p>
+    <span class="engine-tag">PlayCanvas Engine ▸ SOG / PLY / ZIP対応</span>
+
+    <div class="section">
+      <div class="label">01 ▸ Splat Files</div>
+      <div class="drop" id="splat-drop">
+        ⬆ ドラッグ&ドロップ or クリック
+        <div class="hint">.sog / .ply 個別、または .zip（まとめて）</div>
+      </div>
+      <ul id="splat-list"></ul>
+    </div>
+
+    <div class="section">
+      <div class="label">02 ▸ BGM <span style="color:var(--dim);letter-spacing:0">(任意)</span></div>
+      <div class="drop" id="audio-drop">
+        ⬆ 音楽ファイルをドロップ
+        <div class="hint">単体 .mp3/.wav 等、または .zip（複数曲を順番再生）</div>
+      </div>
+      <div id="audio-status" style="display:none"></div>
+    </div>
+
+    <div class="section">
+      <div class="label">03 ▸ 切替間隔</div>
+      <div class="controls-row">
+        <label>スライド切替</label>
+        <input type="number" id="interval" value="15" min="3" max="600">
+        <label>秒</label>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="label">04 ▸ ベース位置</div>
+      <div class="settings-grid">
+        <div class="s-row">
+          <span class="s-key">X</span>
+          <input type="range" id="s-x" min="-5" max="5" step="0.1" value="0">
+          <span class="s-val" id="v-x">0.0</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">Y (高さ)</span>
+          <input type="range" id="s-y" min="-3" max="3" step="0.1" value="0">
+          <span class="s-val" id="v-y">0.0</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">Z</span>
+          <input type="range" id="s-z" min="-5" max="5" step="0.1" value="0">
+          <span class="s-val" id="v-z">0.0</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="label">05 ▸ アニメーション <span style="color:var(--dim);letter-spacing:0;font-size:9px">（開始 → 終了オフセット）</span></div>
+      <div class="anim-row">
+        <span class="anim-key">ANIM X</span>
+        <span class="anim-label">開始</span>
+        <input type="range" id="ax-start" min="-2" max="2" step="0.05" value="0">
+        <span class="anim-val" id="vax-start">0.0</span>
+        <span class="anim-arrow">→</span>
+        <span class="anim-label">終了</span>
+        <input type="range" id="ax-end" min="-2" max="2" step="0.05" value="0">
+        <span class="anim-val" id="vax-end">0.0</span>
+      </div>
+      <div class="anim-row">
+        <span class="anim-key">ANIM Y</span>
+        <span class="anim-label">開始</span>
+        <input type="range" id="ay-start" min="-2" max="2" step="0.05" value="0">
+        <span class="anim-val" id="vay-start">0.0</span>
+        <span class="anim-arrow">→</span>
+        <span class="anim-label">終了</span>
+        <input type="range" id="ay-end" min="-2" max="2" step="0.05" value="0">
+        <span class="anim-val" id="vay-end">0.0</span>
+      </div>
+      <div class="anim-row">
+        <span class="anim-key">ANIM Z</span>
+        <span class="anim-label">開始</span>
+        <input type="range" id="az-start" min="-2" max="2" step="0.05" value="0">
+        <span class="anim-val" id="vaz-start">0.0</span>
+        <span class="anim-arrow">→</span>
+        <span class="anim-label">終了</span>
+        <input type="range" id="az-end" min="-2" max="2" step="0.05" value="0">
+        <span class="anim-val" id="vaz-end">0.0</span>
+      </div>
+      <p style="font-size:10px;color:var(--dim);margin-top:8px;line-height:1.6">
+        全て0にするとアニメなし。Z: -0.5→1.0 でモデルが手前に近づく演出。
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;align-items:center">
+        <span style="font-size:10px;color:var(--dim);letter-spacing:.1em">一回おきに反転:</span>
+        <label style="font-size:11px;color:var(--fg);display:flex;align-items:center;gap:4px;cursor:pointer">
+          <input type="checkbox" id="rev-x" style="accent-color:var(--accent)"> X
+        </label>
+        <label style="font-size:11px;color:var(--fg);display:flex;align-items:center;gap:4px;cursor:pointer">
+          <input type="checkbox" id="rev-y" style="accent-color:var(--accent)"> Y
+        </label>
+        <label style="font-size:11px;color:var(--fg);display:flex;align-items:center;gap:4px;cursor:pointer">
+          <input type="checkbox" id="rev-z" style="accent-color:var(--accent)"> Z
+        </label>
+      </div>
+      <button id="reset-btn" style="margin-top:10px;padding:8px 14px;background:transparent;color:var(--dim);border:1px solid var(--border);cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:.15em;text-transform:uppercase;transition:all .15s">⟲ ベース・アニメをリセット</button>
+    </div>
+
+    <div class="section">
+      <div class="label">06 ▸ パーティクル</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <label style="font-size:18px;color:var(--fg);display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="particles-enabled" style="accent-color:var(--accent)">
+          <span>パーティクルを表示</span>
+        </label>
+      </div>
+      <div class="settings-grid">
+        <div class="s-row">
+          <span class="s-key">数</span>
+          <input type="range" id="p-count" min="50" max="500" step="10" value="200">
+          <span class="s-val" id="vp-count">200</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">サイズ</span>
+          <input type="range" id="p-size" min="0.01" max="0.15" step="0.005" value="0.03">
+          <span class="s-val" id="vp-size">0.03</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">速さ</span>
+          <input type="range" id="p-speed" min="0.05" max="2.0" step="0.05" value="0.3">
+          <span class="s-val" id="vp-speed">0.30</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">明るさ</span>
+          <input type="range" id="p-bright" min="0.1" max="2.0" step="0.05" value="1.0">
+          <span class="s-val" id="vp-bright">1.00</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">色</span>
+          <input type="color" id="p-color" value="#ffffff">
+          <span class="s-val" id="vp-color" style="min-width:80px">#ffffff</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">動き方</span>
+          <select id="p-motion" style="flex:1">
+            <option value="drift">ふわふわ漂う</option>
+            <option value="fall">上から下に降る</option>
+            <option value="radial">全方向に放射状</option>
+          </select>
+        </div>
+        <div class="s-row">
+          <span class="s-key">表示</span>
+          <select id="p-visibility" style="flex:1">
+            <option value="always">常時表示</option>
+            <option value="fade-only">暗転中だけ</option>
+            <option value="fade-linked">フェード連動</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="label">07 ▸ リピート</div>
+      <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center">
+        <label style="font-size:12px;color:var(--fg);display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="repeat-model" checked style="accent-color:var(--accent)">
+          <span>3Dモデル</span>
+        </label>
+        <label style="font-size:12px;color:var(--fg);display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="repeat-music" checked style="accent-color:var(--accent)">
+          <span>音楽</span>
+        </label>
+      </div>
+      <p style="font-size:10px;color:var(--dim);margin-top:8px;line-height:1.6">
+        3DモデルOFF: 最後のスライド後に暗転停止<br>
+        音楽OFF: 最後の曲が終わったら停止
+      </p>
+    </div>
+
+    <button class="vr-btn" id="vr-start-btn" disabled>🥽 VR MODE</button>
+
+    <div class="note">
+      <b>VR MODE</b>: Quest 3でVRに入る<br>
+      ✦ トリガーを押すとスライドショー開始<br>
+      ✦ 再生中はトリガーで次のスライドへ<br>
+      ✦ WebXRはHTTPS必須
+    </div>
+  </div>
+</div>
+
+<div id="viewer-container"></div>
+<div id="loading"><span class="pulse"></span>LOADING</div>
+
+<div id="hud" class="hidden">
+  <div class="row"><span class="key">SLIDE</span><span class="val" id="slide-counter">0 / 0</span></div>
+  <div class="row"><span class="key">NEXT IN</span><span class="val" id="next-timer">--s</span></div>
+  <div id="progress"><div id="progress-bar"></div></div>
+  <div class="name" id="current-name"></div>
+  <div class="buttons">
+    <button id="vr-btn" class="primary">▸ ENTER VR</button>
+    <button id="prev-btn">⏮ PREV</button>
+    <button id="next-btn">⏭ NEXT</button>
+    <button id="pause-btn">⏸ PAUSE</button>
+    <button id="end-btn" class="danger">✕ END</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "playcanvas": "https://cdn.jsdelivr.net/npm/playcanvas@2.18.1/build/playcanvas.mjs"
+  }
+}
+</script>
+<script type="module">
+import {
+  Application, Asset, Entity, Color, Vec3,
+  FILLMODE_FILL_WINDOW, RESOLUTION_AUTO,
+  StandardMaterial
+} from 'playcanvas';
+
+const BLEND_NORMAL = 2, CULLFACE_NONE = 0;
+
+// ── State ──────────────────────────────────────────────
+let app = null, cameraEntity = null;
+let currentSplatEntity = null, currentAsset = null, currentBlobUrl = null;
+let splatFiles = [], audioFiles = [], audioIndex = 0;
+let audioCtx = null, audioSource = null, audioBuffers = [];
+let intervalSec = 15, currentIndex = -1;
+let timer = null, progressRAF = null, timerStartedAt = 0;
+let isRunning = false, isPaused = false, isLoading = false, inVR = false;
+let orbitState = null;
+let fadePlane = null, fadeMaterial = null;
+let fadeOpacity = 0, fadeTarget = 0, fadeSpeed = 1, onFadeComplete = null;
+
+// Base position
+let basePos = { x: 0, y: 0, z: 0 };
+
+// Animation offsets
+let anim = { xs: 0, xe: 0, ys: 0, ye: 0, zs: 0, ze: 0 };
+let animRev = { x: false, y: false, z: false };
+let slideCount = 0; // 何枚目のスライドか（0-indexed）
+let animProgress = 0; // 0→1 during slide display
+
+// Repeat settings
+let repeatModel = true;
+let repeatMusic = true;
+let musicEnded = false;
+
+// Particles
+let particles = []; // {entity, mat, vx, vy, vz}
+let particleMat = null;
+let particlesEnabled = false;
+let particleCount = 200;
+let particleSize = 0.03;
+let particleSpeed = 0.3;
+let particleBright = 1.0;
+let particleColorHex = '#ffffff';
+let particleMotion = 'drift';
+let particleVisibility = 'always';
+let particleRebuildNeeded = false;
+
+// ── DOM ────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const setupEl = $('setup'), hudEl = $('hud');
+const splatDropEl = $('splat-drop'), audioDropEl = $('audio-drop');
+const intervalEl = $('interval'), vrStartBtn = $('vr-start-btn');
+const splatListEl = $('splat-list'), audioStatusEl = $('audio-status');
+const slideCounterEl = $('slide-counter'), nextTimerEl = $('next-timer');
+const progressBarEl = $('progress-bar'), currentNameEl = $('current-name');
+const endBtn = $('end-btn'), nextBtn = $('next-btn'), prevBtn = $('prev-btn');
+const pauseBtn = $('pause-btn'), vrBtn = $('vr-btn');
+const viewerContainerEl = $('viewer-container'), toastEl = $('toast'), loadingEl = $('loading');
+
+// ── Toast ──────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg, type = 'error') {
+  toastEl.textContent = msg;
+  toastEl.className = type === 'info' ? 'show info' : 'show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3500);
+}
+
+// ── Settings UI ────────────────────────────────────────
+// Attach -/+ step buttons to all range sliders
+function attachStepButtons() {
+  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright'];
+  sliderIds.forEach(id => {
+    const slider = $(id);
+    if (!slider) return;
+    const min = parseFloat(slider.min);
+    const max = parseFloat(slider.max);
+    // パーティクル数だけ整数ステップ
+    const stepDelta = id === 'p-count' ? 10 : 0.05;
+    const stepBtn = (label, delta) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'step-btn';
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        const cur = parseFloat(slider.value);
+        const next = Math.max(min, Math.min(max, Math.round((cur + delta) * 1000) / 1000));
+        slider.value = next;
+        slider.dispatchEvent(new Event('input'));
+      });
+      return b;
+    };
+    const minus = stepBtn('-', -stepDelta);
+    const plus = stepBtn('+', stepDelta);
+    slider.parentNode.insertBefore(minus, slider);
+    slider.parentNode.insertBefore(plus, slider.nextSibling);
+  });
+}
+attachStepButtons();
+
+function initUI() {
+  const bindSlider = (id, valId, fmt, cb) => {
+    const el = $(id), vel = $(valId);
+    el.addEventListener('input', () => { vel.textContent = fmt(parseFloat(el.value)); cb && cb(parseFloat(el.value)); });
+  };
+
+  bindSlider('s-x','v-x', v=>v.toFixed(1), v=>{basePos.x=v; applySplatTransform();});
+  bindSlider('s-y','v-y', v=>v.toFixed(1), v=>{basePos.y=v; applySplatTransform();});
+  bindSlider('s-z','v-z', v=>v.toFixed(1), v=>{basePos.z=v; applySplatTransform();});
+
+  bindSlider('ax-start','vax-start', v=>v.toFixed(2), v=>{anim.xs=v;});
+  bindSlider('ax-end',  'vax-end',   v=>v.toFixed(2), v=>{anim.xe=v;});
+  bindSlider('ay-start','vay-start', v=>v.toFixed(2), v=>{anim.ys=v;});
+  bindSlider('ay-end',  'vay-end',   v=>v.toFixed(2), v=>{anim.ye=v;});
+  bindSlider('az-start','vaz-start', v=>v.toFixed(2), v=>{anim.zs=v;});
+  bindSlider('az-end',  'vaz-end',   v=>v.toFixed(2), v=>{anim.ze=v;});
+
+  // Particle sliders
+  bindSlider('p-count','vp-count', v=>String(Math.round(v)), v=>{particleCount=Math.round(v); particleRebuildNeeded=true;});
+  bindSlider('p-size','vp-size', v=>v.toFixed(3), v=>{particleSize=v; applyParticleSize();});
+  bindSlider('p-speed','vp-speed', v=>v.toFixed(2), v=>{particleSpeed=v;});
+  bindSlider('p-bright','vp-bright', v=>v.toFixed(2), v=>{particleBright=v; applyParticleAppearance();});
+
+  // Particle color
+  $('p-color').addEventListener('input', e => {
+    particleColorHex = e.target.value;
+    $('vp-color').textContent = particleColorHex;
+    applyParticleAppearance();
+  });
+  // Particle motion / visibility
+  $('p-motion').addEventListener('change', e => { particleMotion = e.target.value; });
+  $('p-visibility').addEventListener('change', e => { particleVisibility = e.target.value; });
+  // Particles enabled toggle
+  $('particles-enabled').addEventListener('change', e => {
+    particlesEnabled = e.target.checked;
+    if (particlesEnabled && app && !particles.length) buildParticles();
+    setParticlesVisible(particlesEnabled);
+  });
+}
+initUI();
+
+function readCfg() {
+  intervalSec = Math.max(3, parseInt(intervalEl.value, 10) || 15);
+  basePos.x = parseFloat($('s-x').value);
+  basePos.y = parseFloat($('s-y').value);
+  basePos.z = parseFloat($('s-z').value);
+  anim.xs = parseFloat($('ax-start').value);
+  anim.xe = parseFloat($('ax-end').value);
+  anim.ys = parseFloat($('ay-start').value);
+  anim.ye = parseFloat($('ay-end').value);
+  anim.zs = parseFloat($('az-start').value);
+  anim.ze = parseFloat($('az-end').value);
+  animRev.x = $('rev-x').checked;
+  animRev.y = $('rev-y').checked;
+  animRev.z = $('rev-z').checked;
+  repeatModel = $('repeat-model').checked;
+  repeatMusic = $('repeat-music').checked;
+  // Particles
+  particlesEnabled = $('particles-enabled').checked;
+  particleCount = Math.round(parseFloat($('p-count').value));
+  particleSize = parseFloat($('p-size').value);
+  particleSpeed = parseFloat($('p-speed').value);
+  particleBright = parseFloat($('p-bright').value);
+  particleColorHex = $('p-color').value;
+  particleMotion = $('p-motion').value;
+  particleVisibility = $('p-visibility').value;
+}
+
+// ── Splat transform ─────────────────────────────────────
+function applySplatTransform() {
+  if (!currentSplatEntity) return;
+  const t = animProgress;
+  // 反転チェック: チェックされてて、奇数枚目（slideCount % 2 === 1）なら開始/終了を入れ替え
+  const revX = animRev.x && (slideCount % 2 === 1);
+  const revY = animRev.y && (slideCount % 2 === 1);
+  const revZ = animRev.z && (slideCount % 2 === 1);
+  const xs = revX ? anim.xe : anim.xs;
+  const xe = revX ? anim.xs : anim.xe;
+  const ys = revY ? anim.ye : anim.ys;
+  const ye = revY ? anim.ys : anim.ye;
+  const zs = revZ ? anim.ze : anim.zs;
+  const ze = revZ ? anim.zs : anim.ze;
+  const x = basePos.x + xs + (xe - xs) * t;
+  const y = basePos.y + ys + (ye - ys) * t;
+  const z = basePos.z + zs + (ze - zs) * t;
+  currentSplatEntity.setPosition(x, y, z);
+}
+
+// ── ZIP ────────────────────────────────────────────────
+async function extractZip(file, filterFn) {
+  const zip = await JSZip.loadAsync(file);
+  const results = [];
+  for (const [name, entry] of Object.entries(zip.files)) {
+    if (!entry.dir && filterFn(name)) {
+      const blob = await entry.async('blob');
+      results.push(new File([blob], name.split('/').pop()));
+    }
+  }
+  return results.sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+}
+
+// ── Drop zones ─────────────────────────────────────────
+function setupDropZone(el, accept, onFiles, multiple=true) {
+  el.addEventListener('dragover', e => {e.preventDefault(); el.classList.add('dragover');});
+  el.addEventListener('dragleave', () => el.classList.remove('dragover'));
+  el.addEventListener('drop', e => {e.preventDefault(); el.classList.remove('dragover'); if(e.dataTransfer.files.length) onFiles(Array.from(e.dataTransfer.files));});
+  el.addEventListener('click', () => {
+    const inp = document.createElement('input');
+    inp.type='file'; inp.multiple=multiple; inp.accept=accept;
+    inp.onchange = () => {if(inp.files.length) onFiles(Array.from(inp.files));};
+    inp.click();
+  });
+}
+
+const isSplat = n => /\.(sog|ply)$/i.test(n);
+const isAudio = n => /\.(mp3|wav|ogg|m4a|flac)$/i.test(n);
+
+setupDropZone(splatDropEl, '.sog,.ply,.zip', async files => {
+  for (const f of files) {
+    if (/\.zip$/i.test(f.name)) {
+      showToast('ZIP展開中...', 'info');
+      const ex = await extractZip(f, isSplat);
+      if (ex.length) { splatFiles.push(...ex); showToast(`${ex.length}ファイル追加`, 'info'); }
+      else showToast('ZIP内にsplatなし');
+    } else if (isSplat(f.name)) splatFiles.push(f);
+  }
+  renderSplatList(); updateBtn();
+}, true);
+
+setupDropZone(audioDropEl, 'audio/*,.zip', async files => {
+  const f = files[0]; if (!f) return;
+  if (/\.zip$/i.test(f.name)) {
+    showToast('ZIP展開中...', 'info');
+    const ex = await extractZip(f, isAudio);
+    if (ex.length) { audioFiles = ex; audioStatusEl.textContent = `♪ ${ex.length}曲 (${f.name})`; audioStatusEl.style.display='block'; showToast(`${ex.length}曲読み込み`, 'info'); }
+    else showToast('ZIP内に音楽なし');
+  } else if (isAudio(f.name)) {
+    audioFiles = [f]; audioStatusEl.textContent = `♪ ${f.name}`; audioStatusEl.style.display='block';
+  }
+}, false);
+
+function formatSize(b) {
+  if (b < 1024) return b + 'B';
+  if (b < 1024*1024) return (b/1024).toFixed(0) + 'KB';
+  return (b/1024/1024).toFixed(1) + 'MB';
+}
+function renderSplatList() {
+  splatListEl.innerHTML = '';
+  splatFiles.forEach((f,i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="idx">${String(i+1).padStart(2,'0')}</span><span class="name">${f.name}</span><span class="size">${formatSize(f.size)}</span><button>×</button>`;
+    li.querySelector('button').onclick = () => { splatFiles.splice(i,1); renderSplatList(); updateBtn(); };
+    splatListEl.appendChild(li);
+  });
+}
+function updateBtn() { vrStartBtn.disabled = splatFiles.length === 0; }
+
+// ── Web Audio API ──────────────────────────────────────
+async function loadAudioBuffers() {
+  if (!audioFiles.length) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioBuffers = [];
+  for (const f of audioFiles) {
+    try {
+      const arrayBuffer = await f.arrayBuffer();
+      const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+      audioBuffers.push(decoded);
+    } catch(e) { console.warn('audio decode failed:', f.name, e); }
+  }
+}
+
+function playAudioBuffer(idx) {
+  if (!audioCtx || !audioBuffers.length) return;
+  if (audioSource) { try { audioSource.stop(); } catch(e){} audioSource = null; }
+  const buf = audioBuffers[idx % audioBuffers.length];
+  audioSource = audioCtx.createBufferSource();
+  audioSource.buffer = buf;
+  audioSource.connect(audioCtx.destination);
+  audioSource.onended = () => {
+    const nextIdx = audioIndex + 1;
+    if (nextIdx >= audioBuffers.length && !repeatMusic) {
+      musicEnded = true;
+      audioSource = null;
+      return;
+    }
+    audioIndex = nextIdx % audioBuffers.length;
+    playAudioBuffer(audioIndex);
+  };
+  audioSource.start(0);
+}
+
+function startAudio() {
+  if (!audioBuffers.length) return;
+  audioIndex = 0;
+  musicEnded = false;
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  playAudioBuffer(0);
+}
+
+function stopAudio() {
+  if (audioSource) { try { audioSource.stop(); } catch(e){} audioSource = null; }
+  if (audioCtx) { try { audioCtx.suspend(); } catch(e){} }
+}
+
+function pauseAudio() {
+  if (audioCtx) audioCtx.suspend();
+}
+function resumeAudio() {
+  if (audioCtx) audioCtx.resume();
+}
+
+// ── App init ───────────────────────────────────────────
+function initApp() {
+  if (app) return;
+  const canvas = document.createElement('canvas');
+  viewerContainerEl.appendChild(canvas);
+
+  app = new Application(canvas, {
+    graphicsDeviceOptions: { antialias: false, alpha: false, preferWebGl2: true }
+  });
+  app.setCanvasFillMode(FILLMODE_FILL_WINDOW);
+  app.setCanvasResolution(RESOLUTION_AUTO);
+  app.graphicsDevice.maxPixelRatio = 1;
+
+  cameraEntity = new Entity('camera');
+  cameraEntity.addComponent('camera', {
+    clearColor: new Color(0, 0, 0),
+    farClip: 1000, nearClip: 0.05
+  });
+  cameraEntity.setPosition(0, 0.5, 3);
+  cameraEntity.lookAt(new Vec3(0, 0, -1.5));
+  app.root.addChild(cameraEntity);
+
+  createFadePlane();
+  setupOrbitControls(canvas);
+  setupXR();
+
+  app.on('update', dt => {
+    updateFade(dt);
+    updateAnim(dt);
+    updateParticles(dt);
+  });
+  window.addEventListener('resize', () => app.resizeCanvas());
+  app.start();
+}
+
+// ── Animation update ───────────────────────────────────
+function updateAnim(dt) {
+  if (!isRunning || isPaused || !currentSplatEntity) return;
+  const duration = intervalSec;
+  // フェードアウト中もアニメを継続させるため上限なし
+  animProgress += dt / duration;
+  applySplatTransform();
+}
+
+// ── Particles ──────────────────────────────────────────
+function disposeParticles() {
+  particles.forEach(p => { try { p.entity.destroy(); } catch(e){} });
+  particles = [];
+}
+
+function hexToRgb01(hex) {
+  const r = parseInt(hex.slice(1,3),16)/255;
+  const g = parseInt(hex.slice(3,5),16)/255;
+  const b = parseInt(hex.slice(5,7),16)/255;
+  return {r,g,b};
+}
+
+function buildParticles() {
+  if (!app) return;
+  disposeParticles();
+  const c = hexToRgb01(particleColorHex);
+  particleMat = new StandardMaterial();
+  particleMat.emissive = new Color(c.r * particleBright, c.g * particleBright, c.b * particleBright);
+  particleMat.useLighting = false;
+  particleMat.update();
+
+  for (let i = 0; i < particleCount; i++) {
+    const e = new Entity();
+    e.addComponent('render', { type: 'sphere', material: particleMat });
+    // Random position in a wide area around the user
+    const x = (Math.random() - 0.5) * 8;
+    const y = (Math.random() - 0.5) * 3 + 0.5;
+    const z = (Math.random() - 0.5) * 8;
+    e.setPosition(x, y, z);
+    e.setLocalScale(particleSize, particleSize, particleSize);
+    app.root.addChild(e);
+    // Random velocity direction
+    const vx = (Math.random() - 0.5) * 2;
+    const vy = (Math.random() - 0.5) * 2;
+    const vz = (Math.random() - 0.5) * 2;
+    particles.push({ entity: e, vx, vy, vz });
+  }
+  particleRebuildNeeded = false;
+  setParticlesVisible(particlesEnabled);
+}
+
+function applyParticleSize() {
+  particles.forEach(p => {
+    if (p.entity) p.entity.setLocalScale(particleSize, particleSize, particleSize);
+  });
+}
+
+function applyParticleAppearance() {
+  if (!particleMat) return;
+  const c = hexToRgb01(particleColorHex);
+  particleMat.emissive = new Color(c.r * particleBright, c.g * particleBright, c.b * particleBright);
+  particleMat.update();
+}
+
+function setParticlesVisible(v) {
+  particles.forEach(p => { if (p.entity) p.entity.enabled = v; });
+}
+
+function updateParticles(dt) {
+  if (!particlesEnabled) return;
+  if (particleRebuildNeeded) { buildParticles(); }
+  if (!particles.length) return;
+
+  // Visibility based on mode
+  let visibilityFactor = 1;
+  if (particleVisibility === 'fade-only') {
+    visibilityFactor = fadeOpacity > 0.1 ? 1 : 0;
+  } else if (particleVisibility === 'fade-linked') {
+    visibilityFactor = 0.3 + fadeOpacity * 0.7;
+  }
+  if (particleMat) {
+    const c = hexToRgb01(particleColorHex);
+    const b = particleBright * visibilityFactor;
+    particleMat.emissive = new Color(c.r * b, c.g * b, c.b * b);
+    particleMat.update();
+  }
+
+  particles.forEach(p => {
+    const pos = p.entity.getPosition();
+    let nx = pos.x, ny = pos.y, nz = pos.z;
+    if (particleMotion === 'drift') {
+      nx += p.vx * particleSpeed * dt;
+      ny += p.vy * particleSpeed * dt;
+      nz += p.vz * particleSpeed * dt;
+      if (nx > 4 || nx < -4) p.vx *= -1;
+      if (ny > 3 || ny < -1.5) p.vy *= -1;
+      if (nz > 4 || nz < -4) p.vz *= -1;
+    } else if (particleMotion === 'fall') {
+      ny -= particleSpeed * dt;
+      nx += p.vx * particleSpeed * 0.3 * dt;
+      if (ny < -1.5) { ny = 3; nx = (Math.random() - 0.5) * 8; nz = (Math.random() - 0.5) * 8; }
+    } else if (particleMotion === 'radial') {
+      const len = Math.sqrt(nx*nx + (ny-0.5)*(ny-0.5) + nz*nz) || 0.01;
+      const factor = particleSpeed * dt / len;
+      nx += nx * factor;
+      ny += (ny - 0.5) * factor;
+      nz += nz * factor;
+      if (Math.sqrt(nx*nx + (ny-0.5)*(ny-0.5) + nz*nz) > 6) {
+        const r = 0.2;
+        nx = (Math.random() - 0.5) * r;
+        ny = 0.5 + (Math.random() - 0.5) * r;
+        nz = (Math.random() - 0.5) * r;
+      }
+    }
+    p.entity.setPosition(nx, ny, nz);
+  });
+}
+
+// ── Fade ───────────────────────────────────────────────
+function createFadePlane() {
+  fadeMaterial = new StandardMaterial();
+  fadeMaterial.emissive = new Color(0, 0, 0);
+  fadeMaterial.opacity = 0;
+  fadeMaterial.blendType = BLEND_NORMAL;
+  fadeMaterial.cull = CULLFACE_NONE;
+  fadeMaterial.depthWrite = false;
+  fadeMaterial.depthTest = false;
+  fadeMaterial.update();
+  fadePlane = new Entity('fade');
+  fadePlane.addComponent('render', {type:'plane', material:fadeMaterial});
+  fadePlane.setLocalPosition(0, 0, -0.3);
+  fadePlane.setLocalEulerAngles(-90, 0, 0);
+  fadePlane.setLocalScale(2, 1, 2);
+  cameraEntity.addChild(fadePlane);
+}
+
+function updateFade(dt) {
+  if (Math.abs(fadeOpacity - fadeTarget) < 0.004) {
+    if (fadeOpacity !== fadeTarget) {
+      fadeOpacity = fadeTarget; applyFadeOpacity();
+      if (onFadeComplete) { const cb = onFadeComplete; onFadeComplete = null; cb(); }
+    }
+    return;
+  }
+  const dir = fadeTarget > fadeOpacity ? 1 : -1;
+  fadeOpacity = Math.max(0, Math.min(1, fadeOpacity + dir * fadeSpeed * dt));
+  applyFadeOpacity();
+  const reached = dir > 0 ? fadeOpacity >= fadeTarget : fadeOpacity <= fadeTarget;
+  if (reached) {
+    fadeOpacity = fadeTarget; applyFadeOpacity();
+    if (onFadeComplete) { const cb = onFadeComplete; onFadeComplete = null; cb(); }
+  }
+}
+function applyFadeOpacity() {
+  if (!fadeMaterial) return;
+  fadeMaterial.opacity = fadeOpacity; fadeMaterial.update();
+}
+function fadeTo(target, durationMs) {
+  return new Promise(resolve => {
+    const delta = Math.abs(target - fadeOpacity);
+    if (delta < 0.004) { fadeOpacity = target; applyFadeOpacity(); resolve(); return; }
+    fadeSpeed = delta / (durationMs / 1000);
+    fadeTarget = target; onFadeComplete = resolve;
+  });
+}
+
+// ── XR ─────────────────────────────────────────────────
+function setupXR() {
+  if (!app.xr || !app.xr.supported) {
+    vrBtn.disabled = true; vrBtn.style.opacity = '0.4';
+    vrStartBtn.disabled = true; vrStartBtn.style.opacity = '0.4';
+    return;
+  }
+  app.xr.on('start', () => {
+    inVR = true;
+    hudEl.classList.add('hidden');
+  });
+  app.xr.on('end', () => {
+    inVR = false;
+    if (isRunning) hudEl.classList.remove('hidden');
+    else setupEl.classList.remove('hidden');
+  });
+  app.xr.on('error', err => showToast('VRエラー: ' + (err?.message || err)));
+
+  if (app.xr.input) {
+    app.xr.input.on('select', () => {
+      if (!inVR) return;
+      if (!isRunning) {
+        startSlideshowVR();
+      } else if (!isLoading) {
+        manualAdvance(1);
+      }
+    });
+  }
+}
+
+// ── Orbit controls ─────────────────────────────────────
+function setupOrbitControls(canvas) {
+  orbitState = { yaw: 0, pitch: 0, distance: 4, target: new Vec3(0, 0, -1.4) };
+  let dragging = false, panning = false, prevX = 0, prevY = 0, lastTouchDist = 0;
+
+  function apply() {
+    if (inVR) return;
+    const cp = Math.cos(orbitState.pitch);
+    const x = orbitState.target.x + orbitState.distance * Math.sin(orbitState.yaw) * cp;
+    const y = orbitState.target.y + orbitState.distance * Math.sin(orbitState.pitch);
+    const z = orbitState.target.z + orbitState.distance * Math.cos(orbitState.yaw) * cp;
+    cameraEntity.setPosition(x, y, z);
+    cameraEntity.lookAt(orbitState.target);
+  }
+  orbitState.apply = apply; apply();
+
+  canvas.addEventListener('mousedown', e => {dragging=true; panning=e.button===2||e.shiftKey; prevX=e.clientX; prevY=e.clientY; e.preventDefault();});
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  window.addEventListener('mouseup', () => {dragging=false; panning=false;});
+  window.addEventListener('mousemove', e => {
+    if (!dragging || inVR) return;
+    const dx = e.clientX-prevX, dy = e.clientY-prevY;
+    if (panning) {
+      const s = 0.003 * orbitState.distance;
+      orbitState.target.x -= Math.cos(orbitState.yaw)*dx*s;
+      orbitState.target.z += Math.sin(orbitState.yaw)*dx*s;
+      orbitState.target.y += dy*s;
+    } else {
+      orbitState.yaw -= dx*0.005;
+      orbitState.pitch = Math.max(-Math.PI/2+0.05, Math.min(Math.PI/2-0.05, orbitState.pitch+dy*0.005));
+    }
+    prevX=e.clientX; prevY=e.clientY; apply();
+  });
+  canvas.addEventListener('wheel', e => {
+    if (inVR) return; e.preventDefault();
+    orbitState.distance = Math.max(0.3, Math.min(100, orbitState.distance*(e.deltaY>0?1.1:0.9)));
+    apply();
+  }, {passive:false});
+  canvas.addEventListener('touchstart', e => {
+    if (inVR) return;
+    if (e.touches.length===1) {dragging=true; prevX=e.touches[0].clientX; prevY=e.touches[0].clientY;}
+    else if (e.touches.length===2) {const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY; lastTouchDist=Math.sqrt(dx*dx+dy*dy);}
+  }, {passive:false});
+  canvas.addEventListener('touchmove', e => {
+    if (inVR) return; e.preventDefault();
+    if (e.touches.length===1 && dragging) {
+      const dx=e.touches[0].clientX-prevX, dy=e.touches[0].clientY-prevY;
+      orbitState.yaw -= dx*0.005;
+      orbitState.pitch = Math.max(-Math.PI/2+0.05, Math.min(Math.PI/2-0.05, orbitState.pitch+dy*0.005));
+      prevX=e.touches[0].clientX; prevY=e.touches[0].clientY; apply();
+    } else if (e.touches.length===2) {
+      const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      if (lastTouchDist>0) {orbitState.distance=Math.max(0.3,Math.min(100,orbitState.distance*lastTouchDist/dist)); apply();}
+      lastTouchDist=dist;
+    }
+  }, {passive:false});
+  canvas.addEventListener('touchend', () => {dragging=false; lastTouchDist=0;});
+}
+
+// ── Splat loading ──────────────────────────────────────
+function loadSplatFile(file) {
+  return new Promise((resolve, reject) => {
+    const blobUrl = URL.createObjectURL(file);
+    const asset = new Asset(file.name, 'gsplat', {url: blobUrl, filename: file.name});
+    asset.once('load', () => resolve({asset, blobUrl}));
+    asset.once('error', err => {URL.revokeObjectURL(blobUrl); reject(new Error(String(err)));});
+    app.assets.add(asset); app.assets.load(asset);
+  });
+}
+
+function disposeCurrentSplat() {
+  if (currentSplatEntity) {currentSplatEntity.destroy(); currentSplatEntity=null;}
+  if (currentAsset) {try{app.assets.remove(currentAsset); currentAsset.unload();}catch(e){} currentAsset=null;}
+  if (currentBlobUrl) {URL.revokeObjectURL(currentBlobUrl); currentBlobUrl=null;}
+}
+
+async function loadSlideData(index) {
+  disposeCurrentSplat();
+  currentIndex = ((index % splatFiles.length) + splatFiles.length) % splatFiles.length;
+  const file = splatFiles[currentIndex];
+  currentNameEl.textContent = file.name;
+  updateHUD();
+  animProgress = 0;
+  try {
+    const {asset, blobUrl} = await loadSplatFile(file);
+    currentAsset = asset; currentBlobUrl = blobUrl;
+    currentSplatEntity = new Entity('splat-' + currentIndex);
+    currentSplatEntity.addComponent('gsplat', {asset});
+    currentSplatEntity.setEulerAngles(180, 0, 0);
+    app.root.addChild(currentSplatEntity);
+    applySplatTransform();
+    if (!inVR) autoFrameCamera();
+  } catch(e) {
+    console.error(e); showToast(`読み込み失敗: ${file.name}`);
+  }
+}
+
+async function showSlide(index) {
+  if (isLoading) return;
+  isLoading = true; loadingEl.classList.add('show');
+  const isFirst = currentIndex === -1;
+  if (isFirst) {
+    slideCount = 0;
+    fadeOpacity = 1; applyFadeOpacity();
+    await loadSlideData(index);
+    await fadeTo(0, 1500);
+  } else {
+    await fadeTo(1, 1500);
+    slideCount++;
+    await loadSlideData(index);
+    await fadeTo(0, 1500);
+  }
+  isLoading = false; loadingEl.classList.remove('show');
+}
+
+function autoFrameCamera() {
+  if (!currentSplatEntity || inVR) return;
+  try {
+    const gs = currentSplatEntity.gsplat;
+    const aabb = gs?.customAabb || gs?.instance?.meshInstance?.aabb || gs?.instance?.aabb;
+    if (aabb?.halfExtents) {
+      const ext = aabb.halfExtents;
+      const radius = Math.max(ext.x, ext.y, ext.z);
+      if (radius > 0 && isFinite(radius)) {
+        if (aabb.center) {orbitState.target.x=aabb.center.x+basePos.x; orbitState.target.z=aabb.center.z+basePos.z;}
+        orbitState.distance = Math.max(2, radius*2.5);
+        orbitState.apply();
+      }
+    }
+  } catch(e){}
+}
+
+// ── Slideshow ──────────────────────────────────────────
+async function enterVRSetup() {
+  readCfg();
+  if (!app) initApp();
+  if (!app.xr?.supported) {showToast('VR非対応'); return;}
+  // Build particles if enabled
+  if (particlesEnabled) buildParticles();
+  // Load audio buffers using user gesture
+  await loadAudioBuffers();
+  setupEl.classList.add('hidden');
+  cameraEntity.camera.startXr('immersive-vr', 'local-floor', {
+    callback: err => {
+      if (err) {showToast('VR起動失敗: '+(err.message||err)); setupEl.classList.remove('hidden');}
+    }
+  });
+}
+
+async function startSlideshowVR() {
+  isRunning = true; isPaused = false;
+  startAudio();
+  await showSlide(0);
+  scheduleNext();
+}
+
+function scheduleNext() {
+  clearTimeout(timer); cancelAnimationFrame(progressRAF);
+  if (!isRunning || isPaused) return;
+  timerStartedAt = performance.now();
+  const duration = intervalSec * 1000;
+  const tick = () => {
+    if (!isRunning || isPaused) return;
+    const elapsed = performance.now() - timerStartedAt;
+    const remaining = Math.max(0, duration - elapsed);
+    progressBarEl.style.width = `${(elapsed/duration)*100}%`;
+    nextTimerEl.textContent = `${Math.ceil(remaining/1000)}s`;
+    if (remaining > 0) progressRAF = requestAnimationFrame(tick);
+  };
+  progressRAF = requestAnimationFrame(tick);
+  timer = setTimeout(async () => {
+    if (!isRunning || isPaused) return;
+    // 3Dモデルリピート判定
+    const isLast = currentIndex === splatFiles.length - 1;
+    if (isLast && !repeatModel) {
+      // 暗転して停止
+      await fadeTo(1, 1500);
+      disposeCurrentSplat();
+      isRunning = false;
+      progressBarEl.style.width = '0%';
+      nextTimerEl.textContent = '--s';
+      return;
+    }
+    await showSlide(currentIndex + 1);
+    scheduleNext();
+  }, duration);
+}
+
+async function manualAdvance(dir) {
+  if (!isRunning || isLoading) return;
+  clearTimeout(timer); cancelAnimationFrame(progressRAF);
+  await showSlide(currentIndex + dir);
+  if (!isPaused) scheduleNext();
+}
+
+function togglePause() {
+  if (!isRunning) return;
+  isPaused = !isPaused;
+  pauseBtn.textContent = isPaused ? '▶ RESUME' : '⏸ PAUSE';
+  if (isPaused) {pauseAudio(); clearTimeout(timer); cancelAnimationFrame(progressRAF);}
+  else {resumeAudio(); scheduleNext();}
+}
+
+function endSlideshow() {
+  isRunning = false; isPaused = false;
+  clearTimeout(timer); cancelAnimationFrame(progressRAF);
+  onFadeComplete = null; fadeOpacity = 0; fadeTarget = 0; applyFadeOpacity();
+  stopAudio();
+  if (app?.xr?.active) {try{app.xr.end();}catch(e){}}
+  disposeParticles();
+  particleMat = null;
+  disposeCurrentSplat();
+  if (app) {try{app.destroy();}catch(e){} app=null;}
+  viewerContainerEl.innerHTML = '';
+  cameraEntity=null; fadePlane=null; fadeMaterial=null; orbitState=null;
+  currentIndex = -1; animProgress = 0; slideCount = 0;
+  hudEl.classList.add('hidden'); setupEl.classList.remove('hidden');
+  pauseBtn.textContent = '⏸ PAUSE'; progressBarEl.style.width = '0%';
+}
+
+function enterVR() {
+  if (!app?.xr?.supported || !cameraEntity) {showToast('VR非対応'); return;}
+  if (app.xr.active) return;
+  cameraEntity.camera.startXr('immersive-vr', 'local-floor', {
+    callback: err => {if(err) showToast('VR起動失敗: '+(err.message||err));}
+  });
+}
+
+function updateHUD() { slideCounterEl.textContent = `${currentIndex+1} / ${splatFiles.length}`; }
+
+// ── Wire up ────────────────────────────────────────────
+vrStartBtn.addEventListener('click', enterVRSetup);
+endBtn.addEventListener('click', endSlideshow);
+nextBtn.addEventListener('click', () => manualAdvance(1));
+prevBtn.addEventListener('click', () => manualAdvance(-1));
+pauseBtn.addEventListener('click', togglePause);
+vrBtn.addEventListener('click', enterVR);
+
+// Reset button - resets all sliders and checkboxes to 0/false
+$('reset-btn').addEventListener('click', () => {
+  const resetSlider = (id, valId, value) => {
+    $(id).value = value;
+    $(valId).textContent = value.toFixed(1);
+    $(id).dispatchEvent(new Event('input'));
+  };
+  const resetSliderAnim = (id, valId, value) => {
+    $(id).value = value;
+    $(valId).textContent = value.toFixed(2);
+    $(id).dispatchEvent(new Event('input'));
+  };
+  resetSlider('s-x','v-x',0);
+  resetSlider('s-y','v-y',0);
+  resetSlider('s-z','v-z',0);
+  resetSliderAnim('ax-start','vax-start',0);
+  resetSliderAnim('ax-end','vax-end',0);
+  resetSliderAnim('ay-start','vay-start',0);
+  resetSliderAnim('ay-end','vay-end',0);
+  resetSliderAnim('az-start','vaz-start',0);
+  resetSliderAnim('az-end','vaz-end',0);
+  $('rev-x').checked = false;
+  $('rev-y').checked = false;
+  $('rev-z').checked = false;
+  $('repeat-model').checked = true;
+  $('repeat-music').checked = true;
+  // Particles reset
+  $('particles-enabled').checked = false;
+  $('p-count').value = 200; $('vp-count').textContent = '200';
+  $('p-size').value = 0.03; $('vp-size').textContent = '0.030';
+  $('p-speed').value = 0.3; $('vp-speed').textContent = '0.30';
+  $('p-bright').value = 1.0; $('vp-bright').textContent = '1.00';
+  $('p-color').value = '#ffffff'; $('vp-color').textContent = '#ffffff';
+  $('p-motion').value = 'drift';
+  $('p-visibility').value = 'always';
+  showToast('リセットしました', 'info');
+});
+
+window.addEventListener('keydown', e => {
+  if (inVR) return;
+  if (!isRunning) return;
+  if (e.key === 'ArrowRight' || e.key === 'n') manualAdvance(1);
+  else if (e.key === 'ArrowLeft' || e.key === 'p') manualAdvance(-1);
+  else if (e.key === ' ') {e.preventDefault(); togglePause();}
+  else if (e.key === 'Escape') endSlideshow();
+  else if (e.key === 'v') enterVR();
+});
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+</script>
+</body>
+</html>
