@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v1.3</span>
+      <span class="version">v1.4</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -447,7 +447,6 @@ let app = null, cameraEntity = null;
 let currentSplatEntity = null, currentAsset = null, currentBlobUrl = null;
 let splatFiles = [], audioFiles = [], audioIndex = 0;
 let audioCtx = null, audioSource = null, audioBuffers = [];
-let audioGeneration = 0; // Increment to invalidate stale onended handlers
 let intervalSec = 15, currentIndex = -1;
 let fadeTimeMs = 1500;
 let autoInterval = false;
@@ -949,70 +948,37 @@ async function loadAudioBuffers() {
   }
 }
 
-let audioPlayTimer = null;
-
 function playAudioBuffer(idx) {
   if (!audioCtx || !audioBuffers.length) return;
-  // Stop previous source
-  if (audioSource) {
-    try { audioSource.onended = null; } catch(e){}
-    try { audioSource.stop(); } catch(e){}
-    audioSource = null;
-  }
-  if (audioPlayTimer) { clearTimeout(audioPlayTimer); audioPlayTimer = null; }
-
-  const myGeneration = audioGeneration;
+  if (audioSource) { try { audioSource.stop(); } catch(e){} audioSource = null; }
   const buf = audioBuffers[idx % audioBuffers.length];
-  const newSource = audioCtx.createBufferSource();
-  newSource.buffer = buf;
-  newSource.loop = false;
-  newSource.connect(audioCtx.destination);
-  audioSource = newSource;
-  newSource.start(0);
-
-  // Schedule next track based on buffer duration (more reliable than onended)
-  const durationMs = buf.duration * 1000 + 50;
-  audioPlayTimer = setTimeout(() => {
-    if (myGeneration !== audioGeneration) return;
+  audioSource = audioCtx.createBufferSource();
+  audioSource.buffer = buf;
+  audioSource.connect(audioCtx.destination);
+  audioSource.onended = () => {
     const nextIdx = audioIndex + 1;
     if (nextIdx >= audioBuffers.length && !repeatMusic) {
-      // Music ends - stop completely
-      musicEnded = true;
-      try { newSource.stop(); } catch(e){}
-      audioSource = null;
-      audioPlayTimer = null;
-      return;
+      musicEnded = true; audioSource = null; return;
     }
     audioIndex = nextIdx % audioBuffers.length;
     playAudioBuffer(audioIndex);
-  }, durationMs);
+  };
+  audioSource.start(0);
 }
 
 function startAudio() {
   if (!audioBuffers.length) return;
-  audioGeneration++; // invalidate old onended handlers
   audioIndex = 0; musicEnded = false;
   if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   playAudioBuffer(0);
 }
 
 function stopAudio() {
-  audioGeneration++;
-  if (audioPlayTimer) { clearTimeout(audioPlayTimer); audioPlayTimer = null; }
-  if (audioSource) {
-    try { audioSource.onended = null; } catch(e){}
-    try { audioSource.stop(); } catch(e){}
-    audioSource = null;
-  }
+  if (audioSource) { try { audioSource.stop(); } catch(e){} audioSource = null; }
   if (audioCtx) { try { audioCtx.suspend(); } catch(e){} }
 }
-function pauseAudio() {
-  if (audioPlayTimer) { clearTimeout(audioPlayTimer); audioPlayTimer = null; }
-  if (audioCtx) audioCtx.suspend();
-}
-function resumeAudio() {
-  if (audioCtx) audioCtx.resume();
-}
+function pauseAudio() { if (audioCtx) audioCtx.suspend(); }
+function resumeAudio() { if (audioCtx) audioCtx.resume(); }
 
 // ── Background color ───────────────────────────────────
 function applyBgColor() {
