@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v2.7</span>
+      <span class="version">v2.8</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -1368,22 +1368,17 @@ let endFadeOpacity = 0;
 
 function createEndText() {
   if (!app || endTextEntity) return;
-  const w = 1024, h = 256;
+  const w = 512, h = 128;
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, w, h);
-  // Flip horizontally to correct mirror image on plane
-  ctx.save();
-  ctx.translate(w, 0);
-  ctx.scale(-1, 1);
   ctx.fillStyle = endColorHex;
-  ctx.font = '300 180px "M PLUS 1 Code", monospace';
+  ctx.font = 'bold 96px Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('END', w / 2, h / 2);
-  ctx.restore();
 
   const texture = new Texture(app.graphicsDevice, {
     width: w, height: h,
