@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v2.3</span>
+      <span class="version">v2.5</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -440,6 +440,7 @@
   <div class="row"><span class="key">MUSIC RPT</span><span class="val" id="debug-repeat">--</span></div>
   <div class="row"><span class="key">AUDIO IDX</span><span class="val" id="debug-audio">--</span></div>
   <div class="row"><span class="key">END STATE</span><span class="val" id="debug-end" style="font-size:9px">--</span></div>
+  <div class="row"><span class="key">FADE</span><span class="val" id="debug-fade" style="font-size:9px">--</span></div>
   <div id="progress"><div id="progress-bar"></div></div>
   <div class="name" id="current-name"></div>
   <div class="buttons">
@@ -1298,6 +1299,8 @@ function initApp() {
     if (dr) dr.textContent = repeatMusic ? 'ON' : 'OFF';
     if (da) da.textContent = `${audioIndex}/${audioBuffers.length} ended:${musicEnded}`;
     if (de) de.textContent = `end:${endTextEntity?'YES':'NO'} fading:${endFading} op:${endFadeOpacity.toFixed(2)}`;
+    const df = document.getElementById('debug-fade');
+    if (df) df.textContent = `fadeOp:${fadeOpacity.toFixed(2)} target:${fadeTarget.toFixed(2)}`;
   });
   window.addEventListener('resize', () => app.resizeCanvas());
   app.start();
@@ -1369,15 +1372,18 @@ function createEndText() {
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
-  // Black background
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, w, h);
-  // Draw text with chosen color
+  // Flip horizontally to correct mirror image on plane
+  ctx.save();
+  ctx.translate(w, 0);
+  ctx.scale(-1, 1);
   ctx.fillStyle = endColorHex;
   ctx.font = '300 180px "M PLUS 1 Code", monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('END', w / 2, h / 2);
+  ctx.restore();
 
   const texture = new Texture(app.graphicsDevice, {
     width: w, height: h,
@@ -1410,7 +1416,7 @@ function createEndText() {
   endTextEntity.setPosition(
     basePos.x + endOffsetX,
     basePos.y + endOffsetY,
-    basePos.z + endOffsetZ
+    basePos.z - endOffsetZ
   );
   endTextEntity.enabled = true;
   app.root.addChild(endTextEntity);
@@ -1441,7 +1447,6 @@ function disposeEndText() {
   if (endTextEntity) { try { endTextEntity.destroy(); } catch(e){} }
   endTextEntity = null; endTextMat = null;
 }
-
 // ── XR ─────────────────────────────────────────────────
 // Controller button state tracking
 let prevButtonStates = {}; // 'inputSourceIdx-buttonIdx' → wasPressed
