@@ -950,7 +950,7 @@ async function loadAudioBuffers() {
 
 function playAudioBuffer(idx) {
   if (!audioCtx || !audioBuffers.length) return;
-  if (audioSource) { try { audioSource.onended = null; audioSource.stop(); } catch(e){} audioSource = null; }
+  if (audioSource) { try { audioSource.stop(); } catch(e){} audioSource = null; }
   const buf = audioBuffers[idx % audioBuffers.length];
   audioSource = audioCtx.createBufferSource();
   audioSource.buffer = buf;
@@ -974,7 +974,7 @@ function startAudio() {
 }
 
 function stopAudio() {
-  if (audioSource) { try { audioSource.onended = null; audioSource.stop(); } catch(e){} audioSource = null; }
+  if (audioSource) { try { audioSource.stop(); } catch(e){} audioSource = null; }
   if (audioCtx) { try { audioCtx.suspend(); } catch(e){} }
 }
 function pauseAudio() { if (audioCtx) audioCtx.suspend(); }
