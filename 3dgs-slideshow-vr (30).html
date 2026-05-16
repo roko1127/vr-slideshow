@@ -1,0 +1,1829 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>3DGS SLIDESHOW / VR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0a0a;--fg:#e8e8e8;--dim:#555;
+    --accent:#d4ff00;--accent-dim:#4d5e00;
+    --danger:#ff3860;--border:#1f1f1f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    width:100%;height:100%;overflow:hidden;
+    background:var(--bg);color:var(--fg);
+    font-family:'M PLUS 1 Code',monospace;
+    -webkit-font-smoothing:antialiased;
+  }
+  body::before{
+    content:'';position:fixed;inset:0;pointer-events:none;z-index:100;
+    background-image:
+      linear-gradient(rgba(255,255,255,.012) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.012) 1px,transparent 1px);
+    background-size:32px 32px;
+  }
+  #setup{
+    position:fixed;inset:0;z-index:10;
+    display:flex;align-items:flex-start;justify-content:center;
+    padding:24px;overflow-y:auto;
+  }
+  #setup.hidden{display:none}
+  .panel{
+    width:100%;max-width:920px;
+    border:2px solid var(--border);padding:48px;
+    background:rgba(15,15,15,.92);backdrop-filter:blur(8px);
+    margin:auto;
+  }
+  .title{font-size:20px;letter-spacing:.3em;color:var(--dim);text-transform:uppercase}
+  .version{color:var(--accent);font-size:16px;letter-spacing:.15em;border:1px solid var(--accent-dim);padding:4px 10px}
+  .heading{font-size:48px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px;margin-top:6px}
+  .heading .acc{color:var(--accent)}
+  .subheading{font-size:20px;color:var(--dim);margin-bottom:6px;line-height:1.6}
+  .engine-tag{
+    display:inline-block;font-size:16px;letter-spacing:.2em;
+    color:var(--accent);border:1px solid var(--accent-dim);
+    padding:4px 10px;margin-bottom:36px;
+  }
+  .section{margin-bottom:32px}
+  .label{
+    font-size:18px;letter-spacing:.2em;color:var(--accent);margin-bottom:16px;
+    text-transform:uppercase;display:flex;align-items:baseline;gap:12px;
+  }
+  .label::after{content:'';flex:1;height:1px;background:var(--accent-dim)}
+  .drop{
+    border:2px dashed var(--dim);padding:32px;text-align:center;
+    cursor:pointer;transition:all .15s;font-size:22px;color:var(--fg);user-select:none;
+  }
+  .drop:hover,.drop.dragover{border-color:var(--accent);color:var(--accent);background:rgba(212,255,0,.04)}
+  .drop .hint{font-size:16px;color:var(--dim);margin-top:10px;letter-spacing:.1em}
+  .drop:hover .hint,.drop.dragover .hint{color:var(--accent-dim)}
+  #splat-list{list-style:none;margin-top:16px;max-height:240px;overflow-y:auto}
+  #splat-list li{
+    display:flex;align-items:center;padding:12px 16px;
+    border-left:3px solid var(--accent-dim);margin-bottom:6px;
+    font-size:18px;background:rgba(255,255,255,.02);
+  }
+  #splat-list li .idx{color:var(--accent);margin-right:16px;min-width:36px}
+  #splat-list li .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #splat-list li .size{color:var(--dim);margin-right:16px;font-size:16px}
+  #splat-list li button{background:none;border:none;color:var(--dim);cursor:pointer;font-family:inherit;font-size:22px;padding:0 8px}
+  #splat-list li button:hover{color:var(--danger)}
+  #audio-status,#config-status{margin-top:14px;font-size:18px;color:var(--accent);padding-left:16px;border-left:3px solid var(--accent-dim)}
+  .settings-grid{display:grid;gap:14px}
+  .s-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .s-key{color:var(--dim);font-size:16px;letter-spacing:.1em;min-width:110px;text-transform:uppercase}
+  .s-row input[type=range]{flex:1;min-width:120px;accent-color:var(--accent);cursor:pointer;height:10px;padding:0;border:none;background:var(--border)}
+  .s-val{color:var(--accent);font-size:18px;min-width:54px;text-align:right}
+  .step-btn{
+    width:40px;height:40px;background:transparent;border:1px solid var(--border);
+    color:var(--fg);cursor:pointer;font-family:inherit;font-size:22px;font-weight:700;
+    padding:0;flex-shrink:0;transition:all .1s;line-height:1;
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+  .step-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .step-btn:active{background:rgba(212,255,0,.15)}
+  .anim-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .anim-key{color:var(--dim);font-size:16px;letter-spacing:.1em;min-width:110px;text-transform:uppercase}
+  .anim-label{font-size:14px;color:var(--dim);min-width:40px;text-align:center;letter-spacing:.05em}
+  .anim-row input[type=range]{flex:1;min-width:80px;accent-color:var(--accent);cursor:pointer;height:10px;padding:0;border:none;background:var(--border)}
+  .anim-val{color:var(--accent);font-size:16px;min-width:48px;text-align:right}
+  .anim-arrow{color:var(--dim);font-size:18px;padding:0 4px}
+  .controls-row{display:flex;gap:20px;align-items:center}
+  .controls-row label{font-size:20px;color:var(--dim)}
+  input[type=number]{
+    background:transparent;color:var(--accent);border:none;
+    border-bottom:2px solid var(--dim);font-family:inherit;
+    font-size:24px;width:90px;padding:6px 0;text-align:center;
+  }
+  input[type=number]:focus{outline:none;border-color:var(--accent)}
+  input[type=checkbox]{width:22px;height:22px;cursor:pointer;accent-color:var(--accent)}
+  input[type=color]{width:60px;height:40px;border:1px solid var(--dim);background:transparent;cursor:pointer;padding:2px}
+  select{
+    background:transparent;color:var(--accent);
+    border:1px solid var(--dim);font-family:inherit;
+    font-size:16px;padding:8px 10px;cursor:pointer;
+  }
+  select:focus{outline:none;border-color:var(--accent)}
+  .check-label{font-size:18px;color:var(--fg);display:flex;align-items:center;gap:10px;cursor:pointer}
+  .reset-btn{
+    margin-top:14px;padding:12px 20px;background:transparent;color:var(--dim);
+    border:1px solid var(--border);cursor:pointer;font-family:inherit;
+    font-size:14px;letter-spacing:.15em;text-transform:uppercase;transition:all .15s;
+  }
+  .reset-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .vr-btn{
+    width:100%;padding:26px;background:var(--accent);color:var(--bg);
+    border:none;cursor:pointer;font-family:inherit;font-weight:700;
+    font-size:22px;letter-spacing:.3em;transition:all .15s;text-transform:uppercase;
+    margin-top:32px;
+  }
+  .vr-btn:hover:not(:disabled){background:var(--fg)}
+  .vr-btn:disabled{background:var(--border);color:var(--dim);cursor:not-allowed}
+  .note{
+    margin-top:24px;padding:18px;border-left:3px solid var(--accent-dim);
+    font-size:16px;color:var(--dim);line-height:1.8;background:rgba(212,255,0,.02);
+  }
+  .note b{color:var(--accent);font-weight:500}
+  #viewer-container{position:fixed;inset:0;z-index:1}
+  #viewer-container canvas{display:block;width:100%;height:100%}
+  #hud{
+    position:fixed;top:16px;right:16px;z-index:20;
+    border:1px solid var(--border);background:rgba(10,10,10,.88);
+    backdrop-filter:blur(6px);padding:12px 16px;font-size:12px;min-width:200px;
+  }
+  #hud.hidden{display:none}
+  #hud .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  #hud .key{color:var(--dim);font-size:10px;letter-spacing:.1em}
+  #hud .val{color:var(--accent)}
+  #hud .name{
+    font-size:11px;color:var(--fg);margin-top:4px;padding-top:8px;
+    border-top:1px solid var(--border);overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;max-width:200px;
+  }
+  #hud .buttons{
+    display:grid;grid-template-columns:1fr 1fr;gap:6px;
+    margin-top:10px;padding-top:10px;border-top:1px solid var(--border);
+  }
+  #hud button{
+    padding:6px 8px;background:transparent;color:var(--fg);
+    border:1px solid var(--border);cursor:pointer;font-family:inherit;
+    font-size:10px;letter-spacing:.1em;text-transform:uppercase;transition:all .15s;
+  }
+  #hud button:hover{border-color:var(--accent);color:var(--accent)}
+  #hud button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent);grid-column:1/-1}
+  #hud button.primary:hover{background:var(--fg);border-color:var(--fg);color:var(--bg)}
+  #hud button.danger:hover{border-color:var(--danger);color:var(--danger)}
+  #progress{height:2px;background:var(--border);margin-top:10px;overflow:hidden}
+  #progress-bar{height:100%;width:0;background:var(--accent);transition:width .1s linear}
+  #toast{
+    position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:30;
+    padding:12px 20px;border:1px solid var(--danger);
+    background:rgba(10,10,10,.95);color:var(--danger);
+    font-size:12px;letter-spacing:.1em;opacity:0;transition:opacity .3s;
+    pointer-events:none;max-width:80vw;
+  }
+  #toast.show{opacity:1}
+  #toast.info{border-color:var(--accent);color:var(--accent)}
+  #loading{
+    position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    z-index:15;color:var(--accent);font-size:14px;letter-spacing:.3em;
+    text-transform:uppercase;padding:20px 30px;
+    border:1px solid var(--accent-dim);background:rgba(10,10,10,.9);display:none;
+  }
+  #loading.show{display:block}
+  #loading .pulse{display:inline-block;width:8px;height:8px;background:var(--accent);margin-right:10px;animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  @media(max-width:900px){.panel{padding:30px 20px;max-width:100%}.heading{font-size:36px}.drop{font-size:18px;padding:24px}.label{font-size:16px}}
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div class="title">▸ WebXR / Gaussian Splatting</div>
+      <span class="version">v1.3</span>
+    </div>
+    <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
+    <p class="subheading">Quest 3 VRスライドショー</p>
+    <span class="engine-tag">PlayCanvas Engine ▸ SOG / PLY / ZIP対応</span>
+
+    <div class="section">
+      <div class="label">01 ▸ Splat Files</div>
+      <div class="drop" id="splat-drop">
+        ⬆ ドラッグ&ドロップ or クリック
+        <div class="hint">.sog / .ply / .jpg / .png / .webp、または .zip（まとめて）</div>
+      </div>
+      <ul id="splat-list"></ul>
+    </div>
+
+    <div class="section">
+      <div class="label">02 ▸ BGM <span style="color:var(--dim);letter-spacing:0">(任意)</span></div>
+      <div class="drop" id="audio-drop">
+        ⬆ 音楽ファイルをドロップ
+        <div class="hint">単体 .mp3/.wav 等、または .zip（複数曲を順番再生）</div>
+      </div>
+      <div id="audio-status" style="display:none"></div>
+    </div>
+
+    <div class="section">
+      <div class="label">03 ▸ 設定ファイル <span style="color:var(--dim);letter-spacing:0">(任意)</span></div>
+      <div class="drop" id="config-drop">
+        ⬆ .json 設定ファイルをドロップ
+        <div class="hint">アップロードすると下の設定が上書きされます</div>
+      </div>
+      <div id="config-status" style="display:none"></div>
+    </div>
+
+    <div class="section">
+      <div class="label">04 ▸ 切替間隔</div>
+      <div style="margin-bottom:14px">
+        <label class="check-label"><input type="checkbox" id="auto-interval"> 音楽の長さに合わせる</label>
+      </div>
+      <div id="auto-interval-info" style="display:none;font-size:14px;color:var(--accent);padding:10px 14px;border-left:3px solid var(--accent-dim);margin-bottom:16px;background:rgba(212,255,0,.04);line-height:1.6"></div>
+      <div class="controls-row" style="margin-bottom:16px">
+        <label>スライド切替</label>
+        <input type="number" id="interval" value="15" min="0.1" max="600" step="0.1">
+        <label>秒</label>
+      </div>
+      <div class="s-row">
+        <span class="s-key">フェード時間</span>
+        <input type="range" id="fade-time" min="0" max="5" step="0.1" value="1.5">
+        <span class="s-val" id="vfade-time">1.5</span>
+      </div>
+      <p style="font-size:14px;color:var(--dim);margin-top:8px;line-height:1.6">
+        フェード時間: 暗転と表示にかかる秒数（0で即切替）
+      </p>
+    </div>
+
+    <div class="section">
+      <div class="label">05 ▸ ベース位置</div>
+      <div class="settings-grid">
+        <div class="s-row">
+          <span class="s-key">X</span>
+          <input type="range" id="s-x" min="-5" max="5" step="0.05" value="0">
+          <span class="s-val" id="v-x">0.0</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">Y (高さ)</span>
+          <input type="range" id="s-y" min="-3" max="3" step="0.05" value="1">
+          <span class="s-val" id="v-y">1.00</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">Z</span>
+          <input type="range" id="s-z" min="-5" max="5" step="0.05" value="0">
+          <span class="s-val" id="v-z">0.0</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="label">06 ▸ アニメーション <span style="color:var(--dim);letter-spacing:0;font-size:12px">（開始 → 終了オフセット）</span></div>
+      <div class="anim-row">
+        <span class="anim-key">ANIM X</span>
+        <span class="anim-label">開始</span>
+        <input type="range" id="ax-start" min="-2" max="2" step="0.05" value="0">
+        <span class="anim-val" id="vax-start">0.00</span>
+        <span class="anim-arrow">→</span>
+        <span class="anim-label">終了</span>
+        <input type="range" id="ax-end" min="-2" max="2" step="0.05" value="0">
+        <span class="anim-val" id="vax-end">0.00</span>
+      </div>
+      <div class="anim-row">
+        <span class="anim-key">ANIM Y</span>
+        <span class="anim-label">開始</span>
+        <input type="range" id="ay-start" min="-2" max="2" step="0.05" value="0">
+        <span class="anim-val" id="vay-start">0.00</span>
+        <span class="anim-arrow">→</span>
+        <span class="anim-label">終了</span>
+        <input type="range" id="ay-end" min="-2" max="2" step="0.05" value="0">
+        <span class="anim-val" id="vay-end">0.00</span>
+      </div>
+      <div class="anim-row">
+        <span class="anim-key">ANIM Z</span>
+        <span class="anim-label">開始</span>
+        <input type="range" id="az-start" min="-2" max="2" step="0.05" value="0">
+        <span class="anim-val" id="vaz-start">0.00</span>
+        <span class="anim-arrow">→</span>
+        <span class="anim-label">終了</span>
+        <input type="range" id="az-end" min="-2" max="2" step="0.05" value="-0.4">
+        <span class="anim-val" id="vaz-end">-0.40</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;align-items:center">
+        <span style="font-size:14px;color:var(--dim);letter-spacing:.1em">一回おきに反転:</span>
+        <label class="check-label" style="font-size:16px"><input type="checkbox" id="rev-x"> X</label>
+        <label class="check-label" style="font-size:16px"><input type="checkbox" id="rev-y"> Y</label>
+        <label class="check-label" style="font-size:16px"><input type="checkbox" id="rev-z"> Z</label>
+      </div>
+      <button class="reset-btn" id="reset-btn">⟲ ベース・アニメをリセット</button>
+    </div>
+
+    <div class="section">
+      <div class="label">07 ▸ 背景色・手の色</div>
+      <div class="settings-grid">
+        <div class="s-row">
+          <span class="s-key">背景色</span>
+          <input type="color" id="bg-color" value="#000000">
+          <span class="s-val" id="vbg-color" style="min-width:90px">#000000</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">手の色</span>
+          <input type="color" id="hand-color" value="#000000">
+          <span class="s-val" id="vhand-color" style="min-width:90px">#000000</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="label">08 ▸ パーティクル</div>
+      <div style="margin-bottom:16px">
+        <label class="check-label"><input type="checkbox" id="particles-enabled" checked> パーティクルを表示</label>
+      </div>
+      <div class="settings-grid">
+        <div class="s-row">
+          <span class="s-key">数</span>
+          <input type="range" id="p-count" min="50" max="500" step="10" value="200">
+          <span class="s-val" id="vp-count">200</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">サイズ</span>
+          <input type="range" id="p-size" min="0.001" max="0.15" step="0.001" value="0.004">
+          <span class="s-val" id="vp-size">0.004</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">速さ</span>
+          <input type="range" id="p-speed" min="0.05" max="2.0" step="0.05" value="0.1">
+          <span class="s-val" id="vp-speed">0.10</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">明るさ</span>
+          <input type="range" id="p-bright" min="0.1" max="2.0" step="0.05" value="1.0">
+          <span class="s-val" id="vp-bright">1.00</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">透明度</span>
+          <input type="range" id="p-opacity" min="0.05" max="1.0" step="0.05" value="0.2">
+          <span class="s-val" id="vp-opacity">0.20</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">色</span>
+          <input type="color" id="p-color" value="#ffffff">
+          <span class="s-val" id="vp-color" style="min-width:90px">#ffffff</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">動き方</span>
+          <select id="p-motion" style="flex:1">
+            <option value="drift">ふわふわ漂う</option>
+            <option value="fall">上から下に降る</option>
+            <option value="radial">全方向に放射状</option>
+          </select>
+        </div>
+        <div class="s-row">
+          <span class="s-key">表示</span>
+          <select id="p-visibility" style="flex:1">
+            <option value="always">常時表示</option>
+            <option value="fade-only">暗転中だけ</option>
+            <option value="fade-linked">フェード連動</option>
+          </select>
+        </div>
+        <div class="s-row">
+          <span class="s-key">深度テスト</span>
+          <label class="check-label" style="font-size:14px"><input type="checkbox" id="p-depth-test"> ONで3Dの後ろに隠れる</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="label">09 ▸ リピート</div>
+      <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:center">
+        <label class="check-label"><input type="checkbox" id="repeat-model"> 3Dモデル</label>
+        <label class="check-label"><input type="checkbox" id="repeat-music"> 音楽</label>
+      </div>
+      <p style="font-size:14px;color:var(--dim);margin-top:10px;line-height:1.6">
+        3DモデルOFF: 最後のスライド後に暗転停止<br>
+        音楽OFF: 最後の曲が終わったら停止
+      </p>
+    </div>
+
+    <div class="section">
+      <button class="reset-btn" id="download-config-btn" style="width:100%;padding:16px;font-size:16px">⬇ 設定をJSONダウンロード</button>
+    </div>
+
+    <button class="vr-btn" id="vr-start-btn" disabled>🥽 VR MODE</button>
+
+    <div class="note">
+      <b>VR MODE</b>: Quest 3でVRに入る<br>
+      ✦ トリガーを押すとスライドショー開始<br>
+      ✦ 再生中はトリガーで次のスライドへ<br>
+      ✦ ハンドトラッキング中は操作無効
+    </div>
+  </div>
+</div>
+
+<div id="viewer-container"></div>
+<div id="loading"><span class="pulse"></span>LOADING</div>
+
+<div id="hud" class="hidden">
+  <div class="row"><span class="key">SLIDE</span><span class="val" id="slide-counter">0 / 0</span></div>
+  <div class="row"><span class="key">NEXT IN</span><span class="val" id="next-timer">--s</span></div>
+  <div id="progress"><div id="progress-bar"></div></div>
+  <div class="name" id="current-name"></div>
+  <div class="buttons">
+    <button id="vr-btn" class="primary">▸ ENTER VR</button>
+    <button id="prev-btn">⏮ PREV</button>
+    <button id="next-btn">⏭ NEXT</button>
+    <button id="pause-btn">⏸ PAUSE</button>
+    <button id="end-btn" class="danger">✕ END</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "playcanvas": "https://cdn.jsdelivr.net/npm/playcanvas@2.18.1/build/playcanvas.mjs"
+  }
+}
+</script>
+<script type="module">
+import {
+  Application, Asset, Entity, Color, Vec3,
+  FILLMODE_FILL_WINDOW, RESOLUTION_AUTO,
+  StandardMaterial, Texture, PIXELFORMAT_RGBA8,
+  ADDRESS_CLAMP_TO_EDGE, FILTER_LINEAR
+} from 'playcanvas';
+
+const BLEND_NORMAL = 2, CULLFACE_NONE = 0;
+
+// ── State ──────────────────────────────────────────────
+let app = null, cameraEntity = null;
+let currentSplatEntity = null, currentAsset = null, currentBlobUrl = null;
+let splatFiles = [], audioFiles = [], audioIndex = 0;
+let audioCtx = null, audioSource = null, audioBuffers = [];
+let audioGeneration = 0; // Increment to invalidate stale onended handlers
+let intervalSec = 15, currentIndex = -1;
+let fadeTimeMs = 1500;
+let autoInterval = false;
+let totalMusicDuration = 0; // sum of all audio durations in seconds
+let autoEndAfterMusic = false; // when auto-interval is ON, stop after music ends
+let timer = null, progressRAF = null, timerStartedAt = 0;
+let isRunning = false, isPaused = false, isLoading = false, inVR = false;
+let orbitState = null;
+let fadePlane = null, fadeMaterial = null;
+let fadeOpacity = 0, fadeTarget = 0, fadeSpeed = 1, onFadeComplete = null;
+
+// Base position
+let basePos = { x: 0, y: 1, z: 0 };
+
+// Animation offsets
+let anim = { xs: 0, xe: 0, ys: 0, ye: 0, zs: 0, ze: -0.4 };
+let animRev = { x: false, y: false, z: false };
+let slideCount = 0;
+let animProgress = 0;
+
+// Repeat
+let repeatModel = false, repeatMusic = false, musicEnded = false;
+
+// Background color
+let bgColorHex = '#000000';
+
+// Hand color
+let handColorHex = '#000000';
+
+// Particles
+let particles = [];
+let particleMat = null;
+let particlesEnabled = true;
+let particleCount = 200;
+let particleSize = 0.004;
+let particleSpeed = 0.1;
+let particleBright = 1.0;
+let particleOpacity = 0.2;
+let particleColorHex = '#ffffff';
+let particleMotion = 'drift';
+let particleVisibility = 'always';
+let particleDepthTest = false;
+let particleRebuildNeeded = false;
+
+// Hand tracking (Meta official models)
+let leftHandModel = null, rightHandModel = null;
+let leftHandJoints = {}, rightHandJoints = {};
+let handsLoading = false;
+let handTrackingActive = false;
+
+const HAND_JOINT_NAMES = [
+  'wrist',
+  'thumb-metacarpal','thumb-phalanx-proximal','thumb-phalanx-distal','thumb-tip',
+  'index-finger-metacarpal','index-finger-phalanx-proximal','index-finger-phalanx-intermediate','index-finger-phalanx-distal','index-finger-tip',
+  'middle-finger-metacarpal','middle-finger-phalanx-proximal','middle-finger-phalanx-intermediate','middle-finger-phalanx-distal','middle-finger-tip',
+  'ring-finger-metacarpal','ring-finger-phalanx-proximal','ring-finger-phalanx-intermediate','ring-finger-phalanx-distal','ring-finger-tip',
+  'pinky-finger-metacarpal','pinky-finger-phalanx-proximal','pinky-finger-phalanx-intermediate','pinky-finger-phalanx-distal','pinky-finger-tip'
+];
+
+const HAND_MODEL_URLS = {
+  left: 'https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/generic-hand/left.glb',
+  right: 'https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/generic-hand/right.glb'
+};
+
+// ── DOM ────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const setupEl = $('setup'), hudEl = $('hud');
+const splatDropEl = $('splat-drop'), audioDropEl = $('audio-drop'), configDropEl = $('config-drop');
+const intervalEl = $('interval'), vrStartBtn = $('vr-start-btn');
+const splatListEl = $('splat-list'), audioStatusEl = $('audio-status'), configStatusEl = $('config-status');
+const slideCounterEl = $('slide-counter'), nextTimerEl = $('next-timer');
+const progressBarEl = $('progress-bar'), currentNameEl = $('current-name');
+const endBtn = $('end-btn'), nextBtn = $('next-btn'), prevBtn = $('prev-btn');
+const pauseBtn = $('pause-btn'), vrBtn = $('vr-btn');
+const viewerContainerEl = $('viewer-container'), toastEl = $('toast'), loadingEl = $('loading');
+
+// ── Toast ──────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg, type = 'error') {
+  toastEl.textContent = msg;
+  toastEl.className = type === 'info' ? 'show info' : 'show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3500);
+}
+
+// ── Helpers ────────────────────────────────────────────
+function hexToRgb01(hex) {
+  const r = parseInt(hex.slice(1,3),16)/255;
+  const g = parseInt(hex.slice(3,5),16)/255;
+  const b = parseInt(hex.slice(5,7),16)/255;
+  return {r,g,b};
+}
+
+// ── Settings UI ────────────────────────────────────────
+function attachStepButtons() {
+  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time'];
+  sliderIds.forEach(id => {
+    const slider = $(id);
+    if (!slider) return;
+    const min = parseFloat(slider.min);
+    const max = parseFloat(slider.max);
+    let stepDelta = 0.05;
+    if (id === 'p-count') stepDelta = 10;
+    else if (id === 'p-size') stepDelta = 0.001;
+    else if (id === 'fade-time') stepDelta = 0.1;
+    const mk = (label, delta) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'step-btn'; b.textContent = label;
+      b.addEventListener('click', () => {
+        const cur = parseFloat(slider.value);
+        const next = Math.max(min, Math.min(max, Math.round((cur + delta) * 1000) / 1000));
+        slider.value = next;
+        slider.dispatchEvent(new Event('input'));
+      });
+      return b;
+    };
+    slider.parentNode.insertBefore(mk('-', -stepDelta), slider);
+    slider.parentNode.insertBefore(mk('+', stepDelta), slider.nextSibling);
+  });
+}
+
+function bindSlider(id, valId, fmt, cb) {
+  const el = $(id), vel = $(valId);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    const v = parseFloat(el.value);
+    if (vel) vel.textContent = fmt(v);
+    if (cb) cb(v);
+  });
+}
+
+function initUI() {
+  bindSlider('s-x','v-x', v=>v.toFixed(2), v=>{basePos.x=v; applySplatTransform();});
+  bindSlider('s-y','v-y', v=>v.toFixed(2), v=>{basePos.y=v; applySplatTransform();});
+  bindSlider('s-z','v-z', v=>v.toFixed(2), v=>{basePos.z=v; applySplatTransform();});
+  bindSlider('fade-time','vfade-time', v=>v.toFixed(1), v=>{fadeTimeMs=v*1000; updateAutoIntervalDisplay();});
+  bindSlider('ax-start','vax-start', v=>v.toFixed(2), v=>{anim.xs=v;});
+  bindSlider('ax-end','vax-end', v=>v.toFixed(2), v=>{anim.xe=v;});
+  bindSlider('ay-start','vay-start', v=>v.toFixed(2), v=>{anim.ys=v;});
+  bindSlider('ay-end','vay-end', v=>v.toFixed(2), v=>{anim.ye=v;});
+  bindSlider('az-start','vaz-start', v=>v.toFixed(2), v=>{anim.zs=v;});
+  bindSlider('az-end','vaz-end', v=>v.toFixed(2), v=>{anim.ze=v;});
+
+  bindSlider('p-count','vp-count', v=>String(Math.round(v)), v=>{particleCount=Math.round(v); particleRebuildNeeded=true;});
+  bindSlider('p-size','vp-size', v=>v.toFixed(3), v=>{particleSize=v; applyParticleSize();});
+  bindSlider('p-speed','vp-speed', v=>v.toFixed(2), v=>{particleSpeed=v;});
+  bindSlider('p-bright','vp-bright', v=>v.toFixed(2), v=>{particleBright=v; applyParticleAppearance();});
+  bindSlider('p-opacity','vp-opacity', v=>v.toFixed(2), v=>{particleOpacity=v; applyParticleAppearance();});
+
+  $('p-color').addEventListener('input', e => {
+    particleColorHex = e.target.value;
+    $('vp-color').textContent = particleColorHex;
+    applyParticleAppearance();
+  });
+  $('p-motion').addEventListener('change', e => { particleMotion = e.target.value; });
+  $('p-visibility').addEventListener('change', e => { particleVisibility = e.target.value; });
+  $('p-depth-test').addEventListener('change', e => {
+    particleDepthTest = e.target.checked;
+    if (particleMat) { particleMat.depthTest = particleDepthTest; particleMat.update(); }
+  });
+  $('particles-enabled').addEventListener('change', e => {
+    particlesEnabled = e.target.checked;
+    if (particlesEnabled && app && !particles.length) buildParticles();
+    setParticlesVisible(particlesEnabled);
+  });
+
+  $('bg-color').addEventListener('input', e => {
+    bgColorHex = e.target.value;
+    $('vbg-color').textContent = bgColorHex;
+    applyBgColor();
+  });
+
+  $('hand-color').addEventListener('input', e => {
+    handColorHex = e.target.value;
+    $('vhand-color').textContent = handColorHex;
+    applyHandColor();
+  });
+
+  $('auto-interval').addEventListener('change', async e => {
+    autoInterval = e.target.checked;
+    if (autoInterval && audioFiles.length > 0 && totalMusicDuration === 0) {
+      await calculateTotalMusicDuration();
+    }
+    await updateAutoIntervalDisplay();
+  });
+}
+
+function readCfg() {
+  intervalSec = Math.max(0.1, parseFloat(intervalEl.value) || 15);
+  fadeTimeMs = Math.max(0, parseFloat($('fade-time').value) * 1000);
+  autoInterval = $('auto-interval').checked;
+  // If auto-interval is on, compute and override intervalSec
+  autoEndAfterMusic = false;
+  if (autoInterval && audioFiles.length > 0 && splatFiles.length > 0 && totalMusicDuration > 0) {
+    const fadeT = fadeTimeMs / 1000;
+    const perSlide = totalMusicDuration / splatFiles.length;
+    const displayTime = perSlide - fadeT * 2;
+    if (displayTime > 0) {
+      intervalSec = displayTime;
+      autoEndAfterMusic = true;
+    }
+  }
+  basePos.x = parseFloat($('s-x').value);
+  basePos.y = parseFloat($('s-y').value);
+  basePos.z = parseFloat($('s-z').value);
+  anim.xs = parseFloat($('ax-start').value);
+  anim.xe = parseFloat($('ax-end').value);
+  anim.ys = parseFloat($('ay-start').value);
+  anim.ye = parseFloat($('ay-end').value);
+  anim.zs = parseFloat($('az-start').value);
+  anim.ze = parseFloat($('az-end').value);
+  animRev.x = $('rev-x').checked;
+  animRev.y = $('rev-y').checked;
+  animRev.z = $('rev-z').checked;
+  repeatModel = $('repeat-model').checked;
+  repeatMusic = $('repeat-music').checked;
+  particlesEnabled = $('particles-enabled').checked;
+  particleCount = Math.round(parseFloat($('p-count').value));
+  particleSize = parseFloat($('p-size').value);
+  particleSpeed = parseFloat($('p-speed').value);
+  particleBright = parseFloat($('p-bright').value);
+  particleOpacity = parseFloat($('p-opacity').value);
+  particleColorHex = $('p-color').value;
+  particleMotion = $('p-motion').value;
+  particleVisibility = $('p-visibility').value;
+  particleDepthTest = $('p-depth-test').checked;
+  bgColorHex = $('bg-color').value;
+  handColorHex = $('hand-color').value;
+}
+
+// ── Splat transform ────────────────────────────────────
+function applySplatTransform() {
+  if (!currentSplatEntity) return;
+  const t = animProgress;
+  const revX = animRev.x && (slideCount % 2 === 1);
+  const revY = animRev.y && (slideCount % 2 === 1);
+  const revZ = animRev.z && (slideCount % 2 === 1);
+  const xs = revX ? anim.xe : anim.xs, xe = revX ? anim.xs : anim.xe;
+  const ys = revY ? anim.ye : anim.ys, ye = revY ? anim.ys : anim.ye;
+  const zs = revZ ? anim.ze : anim.zs, ze = revZ ? anim.zs : anim.ze;
+  const x = basePos.x + xs + (xe - xs) * t;
+  const y = basePos.y + ys + (ye - ys) * t;
+  const z = basePos.z + zs + (ze - zs) * t;
+  currentSplatEntity.setPosition(x, y, z);
+}
+
+// ── ZIP ────────────────────────────────────────────────
+async function extractZip(file, filterFn) {
+  const zip = await JSZip.loadAsync(file);
+  const results = [];
+  for (const [name, entry] of Object.entries(zip.files)) {
+    // Skip directories, hidden files, and MacOS metadata
+    if (entry.dir) continue;
+    if (name.startsWith('__MACOSX/') || name.includes('/._') || name.startsWith('._')) continue;
+    if (name.includes('.DS_Store')) continue;
+    if (!filterFn(name)) continue;
+    const blob = await entry.async('blob');
+    results.push(new File([blob], name.split('/').pop()));
+  }
+  return results.sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+}
+
+// ── Drop zones ─────────────────────────────────────────
+function setupDropZone(el, accept, onFiles, multiple=true) {
+  if (!el) return;
+  el.addEventListener('dragover', e => {e.preventDefault(); el.classList.add('dragover');});
+  el.addEventListener('dragleave', () => el.classList.remove('dragover'));
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.classList.remove('dragover');
+    if(e.dataTransfer.files.length) onFiles(Array.from(e.dataTransfer.files));
+  });
+  el.addEventListener('click', () => {
+    const inp = document.createElement('input');
+    inp.type='file'; inp.multiple=multiple; inp.accept=accept;
+    inp.onchange = () => {if(inp.files.length) onFiles(Array.from(inp.files));};
+    inp.click();
+  });
+}
+
+const isSplat = n => /\.(sog|ply)$/i.test(n);
+const isImage = n => /\.(jpg|jpeg|png|webp)$/i.test(n);
+const isSlideFile = n => isSplat(n) || isImage(n);
+const isAudio = n => /\.(mp3|wav|ogg|m4a|flac)$/i.test(n);
+
+setupDropZone(splatDropEl, '.sog,.ply,.jpg,.jpeg,.png,.webp,.zip', async files => {
+  for (const f of files) {
+    if (/\.zip$/i.test(f.name)) {
+      showToast('ZIP展開中...', 'info');
+      const ex = await extractZip(f, isSlideFile);
+      if (ex.length) { splatFiles.push(...ex); showToast(`${ex.length}ファイル追加`, 'info'); }
+      else showToast('ZIP内に対応ファイルなし');
+    } else if (isSlideFile(f.name)) splatFiles.push(f);
+  }
+  renderSplatList(); updateBtn();
+  updateAutoIntervalDisplay();
+}, true);
+
+setupDropZone(audioDropEl, 'audio/*,.zip', async files => {
+  for (const f of files) {
+    if (/\.zip$/i.test(f.name)) {
+      showToast('ZIP展開中...', 'info');
+      try {
+        const ex = await extractZip(f, isAudio);
+        if (ex.length) {
+          audioFiles.push(...ex);
+          showToast(`${ex.length}曲追加 (${f.name})`, 'info');
+        } else {
+          showToast('ZIP内に音楽なし');
+        }
+      } catch(e) {
+        console.error('ZIP extract error:', e);
+        showToast('ZIP展開エラー: ' + e.message);
+      }
+    } else if (isAudio(f.name)) {
+      audioFiles.push(f);
+    }
+  }
+  // Update status display
+  if (audioFiles.length === 1) {
+    audioStatusEl.textContent = `♪ ${audioFiles[0].name}`;
+  } else if (audioFiles.length > 1) {
+    audioStatusEl.textContent = `♪ ${audioFiles.length}曲読み込み中`;
+  }
+  audioStatusEl.style.display = audioFiles.length > 0 ? 'block' : 'none';
+
+  // Recalculate music duration for auto-interval
+  totalMusicDuration = 0;
+  if (audioFiles.length > 0) {
+    await calculateTotalMusicDuration();
+    audioStatusEl.textContent = audioFiles.length === 1
+      ? `♪ ${audioFiles[0].name} (${totalMusicDuration.toFixed(1)}秒)`
+      : `♪ ${audioFiles.length}曲 (合計 ${totalMusicDuration.toFixed(1)}秒)`;
+    updateAutoIntervalDisplay();
+  }
+}, true);
+
+setupDropZone(configDropEl, '.json,application/json', async files => {
+  const f = files[0]; if (!f) return;
+  if (!/\.json$/i.test(f.name)) { showToast('JSONファイルのみ対応'); return; }
+  try {
+    const text = await f.text();
+    const cfg = JSON.parse(text);
+    applyConfigFromJson(cfg);
+    configStatusEl.textContent = `✓ ${f.name} 読み込み完了`;
+    configStatusEl.style.display = 'block';
+    showToast('設定を読み込みました', 'info');
+  } catch(e) {
+    showToast('JSON読み込みエラー: ' + e.message);
+  }
+}, false);
+
+function formatSize(b) {
+  if (b < 1024) return b + 'B';
+  if (b < 1024*1024) return (b/1024).toFixed(0) + 'KB';
+  return (b/1024/1024).toFixed(1) + 'MB';
+}
+
+function renderSplatList() {
+  splatListEl.innerHTML = '';
+  splatFiles.forEach((f,i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="idx">${String(i+1).padStart(2,'0')}</span><span class="name">${f.name}</span><span class="size">${formatSize(f.size)}</span><button>×</button>`;
+    li.querySelector('button').onclick = () => { splatFiles.splice(i,1); renderSplatList(); updateBtn(); updateAutoIntervalDisplay(); };
+    splatListEl.appendChild(li);
+  });
+}
+
+function updateBtn() { vrStartBtn.disabled = splatFiles.length === 0; }
+
+// ── Auto-interval calculation ──────────────────────────
+const autoIntervalInfoEl = $('auto-interval-info');
+
+async function getAudioFileDuration(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(audio.duration || 0);
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(0);
+    };
+    audio.src = url;
+  });
+}
+
+async function calculateTotalMusicDuration() {
+  if (!audioFiles.length) { totalMusicDuration = 0; return; }
+  let total = 0;
+  for (const f of audioFiles) {
+    const d = await getAudioFileDuration(f);
+    total += d;
+  }
+  totalMusicDuration = total;
+}
+
+async function updateAutoIntervalDisplay() {
+  if (!autoInterval) {
+    autoIntervalInfoEl.style.display = 'none';
+    $('interval').disabled = false;
+    $('fade-time').disabled = false;
+    return;
+  }
+  $('interval').disabled = true;
+  $('fade-time').disabled = true;
+  autoIntervalInfoEl.style.display = 'block';
+
+  if (!audioFiles.length) {
+    autoIntervalInfoEl.textContent = '⚠ 音楽ファイルが必要です';
+    return;
+  }
+  if (!splatFiles.length) {
+    autoIntervalInfoEl.textContent = '⚠ スライドファイルが必要です';
+    return;
+  }
+  if (totalMusicDuration === 0) {
+    autoIntervalInfoEl.textContent = '⏳ 音楽の長さを計算中...';
+    await calculateTotalMusicDuration();
+  }
+  const fadeT = parseFloat($('fade-time').value);
+  const perSlide = totalMusicDuration / splatFiles.length;
+  const displayTime = perSlide - fadeT * 2;
+  if (displayTime <= 0) {
+    autoIntervalInfoEl.textContent = `⚠ フェード時間が長すぎます（音楽${totalMusicDuration.toFixed(1)}秒 / ${splatFiles.length}枚 = ${perSlide.toFixed(2)}秒/枚）`;
+    return;
+  }
+  autoIntervalInfoEl.innerHTML = `✓ 自動計算: <b style="color:var(--fg)">${displayTime.toFixed(2)}秒/枚</b><br>` +
+    `<span style="color:var(--dim);font-size:12px">音楽 ${totalMusicDuration.toFixed(1)}秒 ÷ ${splatFiles.length}枚 − フェード ${fadeT.toFixed(1)}秒 × 2</span>`;
+}
+
+// ── JSON config ────────────────────────────────────────
+function applyConfigFromJson(cfg) {
+  const setSliderVal = (id, val) => {
+    const el = $(id);
+    if (el && val !== undefined && val !== null) { el.value = val; el.dispatchEvent(new Event('input')); }
+  };
+  const setCheckbox = (id, val) => {
+    const el = $(id);
+    if (el && val !== undefined) { el.checked = !!val; el.dispatchEvent(new Event('change')); }
+  };
+  const setSelect = (id, val) => {
+    const el = $(id);
+    if (el && val !== undefined) { el.value = val; el.dispatchEvent(new Event('change')); }
+  };
+  const setColorVal = (id, valId, val) => {
+    const el = $(id);
+    if (el && val !== undefined) { el.value = val; const v=$(valId); if(v) v.textContent=val; el.dispatchEvent(new Event('input')); }
+  };
+  if (cfg.interval !== undefined) intervalEl.value = cfg.interval;
+  if (cfg.fadeTime !== undefined) {
+    const el = $('fade-time'); if (el) { el.value = cfg.fadeTime; el.dispatchEvent(new Event('input')); }
+  }
+  if (cfg.autoInterval !== undefined) {
+    const el = $('auto-interval'); if (el) { el.checked = !!cfg.autoInterval; el.dispatchEvent(new Event('change')); }
+  }
+  if (cfg.basePos) { setSliderVal('s-x',cfg.basePos.x); setSliderVal('s-y',cfg.basePos.y); setSliderVal('s-z',cfg.basePos.z); }
+  if (cfg.anim) {
+    setSliderVal('ax-start',cfg.anim.xs); setSliderVal('ax-end',cfg.anim.xe);
+    setSliderVal('ay-start',cfg.anim.ys); setSliderVal('ay-end',cfg.anim.ye);
+    setSliderVal('az-start',cfg.anim.zs); setSliderVal('az-end',cfg.anim.ze);
+  }
+  if (cfg.animReverse) { setCheckbox('rev-x',cfg.animReverse.x); setCheckbox('rev-y',cfg.animReverse.y); setCheckbox('rev-z',cfg.animReverse.z); }
+  if (cfg.bgColor) setColorVal('bg-color','vbg-color',cfg.bgColor);
+  if (cfg.handColor) setColorVal('hand-color','vhand-color',cfg.handColor);
+  if (cfg.particles) {
+    setCheckbox('particles-enabled',cfg.particles.enabled);
+    setSliderVal('p-count',cfg.particles.count);
+    setSliderVal('p-size',cfg.particles.size);
+    setSliderVal('p-speed',cfg.particles.speed);
+    setSliderVal('p-bright',cfg.particles.brightness);
+    setSliderVal('p-opacity',cfg.particles.opacity);
+    if(cfg.particles.color) setColorVal('p-color','vp-color',cfg.particles.color);
+    setSelect('p-motion',cfg.particles.motion);
+    setSelect('p-visibility',cfg.particles.visibility);
+    setCheckbox('p-depth-test',cfg.particles.depthTest);
+  }
+  if (cfg.repeat) {
+    setCheckbox('repeat-model',cfg.repeat.model);
+    setCheckbox('repeat-music',cfg.repeat.music);
+  }
+}
+
+// ── Web Audio API ──────────────────────────────────────
+async function loadAudioBuffers() {
+  if (!audioFiles.length) return;
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  audioBuffers = [];
+  for (const f of audioFiles) {
+    try {
+      const arrayBuffer = await f.arrayBuffer();
+      const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+      audioBuffers.push(decoded);
+    } catch(e) { console.warn('audio decode failed:', f.name, e); }
+  }
+}
+
+let audioPlayTimer = null;
+
+function playAudioBuffer(idx) {
+  if (!audioCtx || !audioBuffers.length) return;
+  // Stop previous source
+  if (audioSource) {
+    try { audioSource.onended = null; } catch(e){}
+    try { audioSource.stop(); } catch(e){}
+    audioSource = null;
+  }
+  if (audioPlayTimer) { clearTimeout(audioPlayTimer); audioPlayTimer = null; }
+
+  const myGeneration = audioGeneration;
+  const buf = audioBuffers[idx % audioBuffers.length];
+  const newSource = audioCtx.createBufferSource();
+  newSource.buffer = buf;
+  newSource.loop = false;
+  newSource.connect(audioCtx.destination);
+  audioSource = newSource;
+  newSource.start(0);
+
+  // Schedule next track based on buffer duration (more reliable than onended)
+  const durationMs = buf.duration * 1000 + 50;
+  audioPlayTimer = setTimeout(() => {
+    if (myGeneration !== audioGeneration) return;
+    const nextIdx = audioIndex + 1;
+    if (nextIdx >= audioBuffers.length && !repeatMusic) {
+      // Music ends - stop completely
+      musicEnded = true;
+      try { newSource.stop(); } catch(e){}
+      audioSource = null;
+      audioPlayTimer = null;
+      return;
+    }
+    audioIndex = nextIdx % audioBuffers.length;
+    playAudioBuffer(audioIndex);
+  }, durationMs);
+}
+
+function startAudio() {
+  if (!audioBuffers.length) return;
+  audioGeneration++; // invalidate old onended handlers
+  audioIndex = 0; musicEnded = false;
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  playAudioBuffer(0);
+}
+
+function stopAudio() {
+  audioGeneration++;
+  if (audioPlayTimer) { clearTimeout(audioPlayTimer); audioPlayTimer = null; }
+  if (audioSource) {
+    try { audioSource.onended = null; } catch(e){}
+    try { audioSource.stop(); } catch(e){}
+    audioSource = null;
+  }
+  if (audioCtx) { try { audioCtx.suspend(); } catch(e){} }
+}
+function pauseAudio() {
+  if (audioPlayTimer) { clearTimeout(audioPlayTimer); audioPlayTimer = null; }
+  if (audioCtx) audioCtx.suspend();
+}
+function resumeAudio() {
+  if (audioCtx) audioCtx.resume();
+}
+
+// ── Background color ───────────────────────────────────
+function applyBgColor() {
+  if (!app || !cameraEntity) return;
+  const c = hexToRgb01(bgColorHex);
+  cameraEntity.camera.clearColor = new Color(c.r, c.g, c.b);
+}
+
+// ── Hand color ─────────────────────────────────────────
+function applyHandColor() {
+  const c = hexToRgb01(handColorHex);
+  const tint = new Color(c.r, c.g, c.b);
+  [leftHandModel, rightHandModel].forEach(model => {
+    if (!model) return;
+    // Traverse all entities and tint their materials
+    model.findComponents('render').forEach(comp => {
+      if (!comp.meshInstances) return;
+      comp.meshInstances.forEach(mi => {
+        if (!mi.material) return;
+        // Clone material to avoid affecting other entities
+        if (!mi._tintedMaterial) {
+          mi.material = mi.material.clone();
+          mi._tintedMaterial = true;
+        }
+        mi.material.diffuse = tint;
+        mi.material.emissive = new Color(c.r * 0.3, c.g * 0.3, c.b * 0.3);
+        mi.material.update();
+      });
+    });
+  });
+}
+
+// ── Particles ──────────────────────────────────────────
+function disposeParticles() {
+  particles.forEach(p => { try { p.entity.destroy(); } catch(e){} });
+  particles = [];
+}
+
+function buildParticleMaterial() {
+  const c = hexToRgb01(particleColorHex);
+  const mat = new StandardMaterial();
+  mat.emissive = new Color(c.r * particleBright, c.g * particleBright, c.b * particleBright);
+  mat.diffuse = new Color(0,0,0);
+  mat.useLighting = false;
+  mat.opacity = particleOpacity;
+  mat.blendType = BLEND_NORMAL;
+  mat.depthWrite = false;
+  mat.depthTest = particleDepthTest;
+  mat.cull = CULLFACE_NONE;
+  if ('opacityFresnel' in mat) mat.opacityFresnel = 0.7;
+  mat.update();
+  return mat;
+}
+
+function buildParticles() {
+  if (!app) return;
+  disposeParticles();
+  particleMat = buildParticleMaterial();
+  for (let i = 0; i < particleCount; i++) {
+    const e = new Entity();
+    e.addComponent('render', { type: 'sphere', material: particleMat });
+    const x = (Math.random() - 0.5) * 8;
+    const y = (Math.random() - 0.5) * 3 + 1.0;
+    const z = (Math.random() - 0.5) * 8;
+    e.setPosition(x, y, z);
+    e.setLocalScale(particleSize, particleSize, particleSize);
+    app.root.addChild(e);
+    const vx = (Math.random() - 0.5) * 2;
+    const vy = (Math.random() - 0.5) * 2;
+    const vz = (Math.random() - 0.5) * 2;
+    particles.push({ entity: e, vx, vy, vz });
+  }
+  particleRebuildNeeded = false;
+  setParticlesVisible(particlesEnabled);
+}
+
+function applyParticleSize() {
+  particles.forEach(p => { if (p.entity) p.entity.setLocalScale(particleSize, particleSize, particleSize); });
+}
+function applyParticleAppearance() {
+  if (!particleMat) return;
+  const c = hexToRgb01(particleColorHex);
+  particleMat.emissive = new Color(c.r * particleBright, c.g * particleBright, c.b * particleBright);
+  particleMat.opacity = particleOpacity;
+  particleMat.update();
+}
+function setParticlesVisible(v) {
+  particles.forEach(p => { if (p.entity) p.entity.enabled = v; });
+}
+
+function updateParticles(dt) {
+  if (!particlesEnabled) return;
+  if (particleRebuildNeeded) buildParticles();
+  if (!particles.length) return;
+
+  let visibilityFactor = 1;
+  if (particleVisibility === 'fade-only') visibilityFactor = fadeOpacity > 0.1 ? 1 : 0;
+  else if (particleVisibility === 'fade-linked') visibilityFactor = 0.3 + fadeOpacity * 0.7;
+
+  if (particleMat) {
+    const c = hexToRgb01(particleColorHex);
+    const b = particleBright * visibilityFactor;
+    particleMat.emissive = new Color(c.r * b, c.g * b, c.b * b);
+    particleMat.update();
+  }
+
+  const speed = particleSpeed * 0.3;
+  particles.forEach(p => {
+    const pos = p.entity.getPosition();
+    let nx = pos.x, ny = pos.y, nz = pos.z;
+    if (particleMotion === 'drift') {
+      nx += p.vx * speed * dt; ny += p.vy * speed * dt; nz += p.vz * speed * dt;
+      if (nx > 4 || nx < -4) p.vx *= -1;
+      if (ny > 4 || ny < -1.5) p.vy *= -1;
+      if (nz > 4 || nz < -4) p.vz *= -1;
+    } else if (particleMotion === 'fall') {
+      ny -= speed * dt; nx += p.vx * speed * 0.3 * dt;
+      if (ny < -1.5) ny += 5;
+    } else if (particleMotion === 'radial') {
+      const cx = nx, cy = ny - 1.0, cz = nz;
+      const len = Math.sqrt(cx*cx + cy*cy + cz*cz) || 0.01;
+      const factor = speed * dt / Math.max(0.5, len);
+      nx += cx * factor; ny += cy * factor; nz += cz * factor;
+      if (Math.sqrt(cx*cx + cy*cy + cz*cz) > 6) {
+        const r = 0.3;
+        nx = (Math.random() - 0.5) * r; ny = 1.0 + (Math.random() - 0.5) * r; nz = (Math.random() - 0.5) * r;
+      }
+    }
+    p.entity.setPosition(nx, ny, nz);
+  });
+}
+
+// ── Hand tracking ──────────────────────────────────────
+function loadHandModel(handedness) {
+  return new Promise((resolve, reject) => {
+    if (!app) { resolve(null); return; }
+    const url = HAND_MODEL_URLS[handedness];
+    const asset = new Asset('hand-' + handedness, 'container', { url });
+    asset.on('load', () => resolve(asset));
+    asset.on('error', err => reject(err));
+    app.assets.add(asset);
+    app.assets.load(asset);
+  });
+}
+
+async function ensureHandModels() {
+  if (handsLoading || (leftHandModel && rightHandModel)) return;
+  handsLoading = true;
+  try {
+    const [leftAsset, rightAsset] = await Promise.all([loadHandModel('left'), loadHandModel('right')]);
+    leftHandModel = setupHandModel(leftAsset, 'left');
+    rightHandModel = setupHandModel(rightAsset, 'right');
+    applyHandColor();
+  } catch (e) { console.warn('Hand model load failed:', e); }
+  handsLoading = false;
+}
+
+function setupHandModel(asset, handedness) {
+  const root = asset.resource.instantiateRenderEntity();
+  root.enabled = false;
+  app.root.addChild(root);
+  const jointMap = handedness === 'left' ? leftHandJoints : rightHandJoints;
+  HAND_JOINT_NAMES.forEach(name => {
+    const e = root.findByName(name);
+    if (e) jointMap[name] = e;
+  });
+  return root;
+}
+
+function disposeHandModels() {
+  try { if (leftHandModel) leftHandModel.destroy(); } catch(e){}
+  try { if (rightHandModel) rightHandModel.destroy(); } catch(e){}
+  leftHandModel = null; rightHandModel = null;
+  leftHandJoints = {}; rightHandJoints = {};
+}
+
+function updateHands() {
+  if (!inVR || !app?.xr?.input) {
+    handTrackingActive = false;
+    if (leftHandModel) leftHandModel.enabled = false;
+    if (rightHandModel) rightHandModel.enabled = false;
+    return;
+  }
+  let anyHandTracked = false, leftTracked = false, rightTracked = false;
+  const sources = app.xr.input.inputSources || [];
+  for (const src of sources) {
+    const hand = src.hand;
+    if (!hand || !hand.tracking) continue;
+    const handedness = src.handedness;
+    const model = handedness === 'left' ? leftHandModel : rightHandModel;
+    const jointMap = handedness === 'left' ? leftHandJoints : rightHandJoints;
+    if (!model) continue;
+    anyHandTracked = true;
+    if (handedness === 'left') leftTracked = true;
+    if (handedness === 'right') rightTracked = true;
+    model.enabled = true;
+    HAND_JOINT_NAMES.forEach(name => {
+      const jointEntity = jointMap[name];
+      if (!jointEntity) return;
+      let joint = null;
+      if (typeof hand.getJointById === 'function') joint = hand.getJointById(name);
+      else if (hand.joints) joint = hand.joints[name];
+      if (!joint) return;
+      const pos = typeof joint.getPosition === 'function' ? joint.getPosition() : joint.position;
+      const rot = typeof joint.getRotation === 'function' ? joint.getRotation() : joint.rotation;
+      if (pos) jointEntity.setPosition(pos.x, pos.y, pos.z);
+      if (rot) jointEntity.setRotation(rot.x, rot.y, rot.z, rot.w);
+    });
+  }
+  if (!leftTracked && leftHandModel) leftHandModel.enabled = false;
+  if (!rightTracked && rightHandModel) rightHandModel.enabled = false;
+  handTrackingActive = anyHandTracked;
+}
+
+// ── App init ───────────────────────────────────────────
+function initApp() {
+  if (app) return;
+  const canvas = document.createElement('canvas');
+  viewerContainerEl.appendChild(canvas);
+
+  app = new Application(canvas, {
+    graphicsDeviceOptions: { antialias: false, alpha: false, preferWebGl2: true }
+  });
+  app.setCanvasFillMode(FILLMODE_FILL_WINDOW);
+  app.setCanvasResolution(RESOLUTION_AUTO);
+  app.graphicsDevice.maxPixelRatio = 1;
+
+  cameraEntity = new Entity('camera');
+  cameraEntity.addComponent('camera', {
+    clearColor: new Color(0, 0, 0),
+    farClip: 1000, nearClip: 0.05
+  });
+  cameraEntity.setPosition(0, 0.5, 3);
+  cameraEntity.lookAt(new Vec3(0, 0, -1.5));
+  app.root.addChild(cameraEntity);
+
+  applyBgColor();
+  createFadePlane();
+  setupOrbitControls(canvas);
+  setupXR();
+
+  app.on('update', dt => {
+    updateFade(dt);
+    updateAnim(dt);
+    updateParticles(dt);
+    updateHands();
+    updateControllerButtons(dt);
+  });
+  window.addEventListener('resize', () => app.resizeCanvas());
+  app.start();
+}
+
+// ── Animation ──────────────────────────────────────────
+function updateAnim(dt) {
+  if (!isRunning || isPaused || !currentSplatEntity) return;
+  const duration = intervalSec;
+  animProgress += dt / duration;
+  applySplatTransform();
+}
+
+// ── Fade ───────────────────────────────────────────────
+function createFadePlane() {
+  fadeMaterial = new StandardMaterial();
+  fadeMaterial.emissive = new Color(0, 0, 0);
+  fadeMaterial.opacity = 0;
+  fadeMaterial.blendType = BLEND_NORMAL;
+  fadeMaterial.cull = CULLFACE_NONE;
+  fadeMaterial.depthWrite = false;
+  fadeMaterial.depthTest = false;
+  fadeMaterial.update();
+  fadePlane = new Entity('fade');
+  fadePlane.addComponent('render', {type:'plane', material:fadeMaterial});
+  fadePlane.setLocalPosition(0, 0, -0.3);
+  fadePlane.setLocalEulerAngles(-90, 0, 0);
+  fadePlane.setLocalScale(2, 1, 2);
+  cameraEntity.addChild(fadePlane);
+}
+
+function updateFade(dt) {
+  if (Math.abs(fadeOpacity - fadeTarget) < 0.004) {
+    if (fadeOpacity !== fadeTarget) {
+      fadeOpacity = fadeTarget; applyFadeOpacity();
+      if (onFadeComplete) { const cb = onFadeComplete; onFadeComplete = null; cb(); }
+    }
+    return;
+  }
+  const dir = fadeTarget > fadeOpacity ? 1 : -1;
+  fadeOpacity = Math.max(0, Math.min(1, fadeOpacity + dir * fadeSpeed * dt));
+  applyFadeOpacity();
+  const reached = dir > 0 ? fadeOpacity >= fadeTarget : fadeOpacity <= fadeTarget;
+  if (reached) {
+    fadeOpacity = fadeTarget; applyFadeOpacity();
+    if (onFadeComplete) { const cb = onFadeComplete; onFadeComplete = null; cb(); }
+  }
+}
+function applyFadeOpacity() {
+  if (!fadeMaterial) return;
+  fadeMaterial.opacity = fadeOpacity; fadeMaterial.update();
+}
+function fadeTo(target, durationMs) {
+  return new Promise(resolve => {
+    const delta = Math.abs(target - fadeOpacity);
+    if (delta < 0.004) { fadeOpacity = target; applyFadeOpacity(); resolve(); return; }
+    fadeSpeed = delta / (durationMs / 1000);
+    fadeTarget = target; onFadeComplete = resolve;
+  });
+}
+
+// ── XR ─────────────────────────────────────────────────
+// Controller button state tracking
+let prevButtonStates = {}; // 'inputSourceIdx-buttonIdx' → wasPressed
+let yButtonHeldSince = null; // timestamp when B/Y started being held
+const VR_EXIT_HOLD_MS = 1500;
+
+function setupXR() {
+  if (!app.xr || !app.xr.supported) {
+    vrBtn.disabled = true; vrBtn.style.opacity = '0.4';
+    vrStartBtn.disabled = true; vrStartBtn.style.opacity = '0.4';
+    return;
+  }
+  app.xr.on('start', () => {
+    inVR = true; hudEl.classList.add('hidden');
+    prevButtonStates = {}; yButtonHeldSince = null;
+  });
+  app.xr.on('end', () => {
+    inVR = false;
+    if (isRunning) hudEl.classList.remove('hidden');
+    else setupEl.classList.remove('hidden');
+  });
+  app.xr.on('error', err => showToast('VRエラー: ' + (err?.message || err)));
+
+  if (app.xr.input) {
+    // Trigger handling (select event)
+    app.xr.input.on('select', (inputSource) => {
+      if (!inVR) return;
+      if (handTrackingActive) return;
+      if (inputSource && inputSource.hand) return;
+      if (!isRunning) { startSlideshowVR(); return; }
+      if (isLoading) return;
+      // Left trigger: previous, Right trigger: next
+      const handedness = inputSource.handedness;
+      if (handedness === 'left') manualAdvance(-1);
+      else manualAdvance(1); // right or unknown
+    });
+  }
+}
+
+// Poll controller buttons each frame for A/X (pause) and B/Y (exit)
+function updateControllerButtons(dt) {
+  if (!inVR || !app?.xr?.input || handTrackingActive) {
+    yButtonHeldSince = null;
+    return;
+  }
+  const sources = app.xr.input.inputSources || [];
+  let anyYHeld = false;
+
+  sources.forEach((src, srcIdx) => {
+    if (src.hand) return; // skip hand-tracked
+    const gamepad = src.gamepad;
+    if (!gamepad || !gamepad.buttons) return;
+    // Quest controller mapping: button 4 = A/X, button 5 = B/Y
+    const handedness = src.handedness;
+    [4, 5].forEach(btnIdx => {
+      const btn = gamepad.buttons[btnIdx];
+      if (!btn) return;
+      const key = `${srcIdx}-${btnIdx}`;
+      const isPressed = btn.pressed;
+      const wasPressed = prevButtonStates[key];
+
+      if (btnIdx === 4) {
+        // A/X button - toggle pause on press (not hold)
+        if (isPressed && !wasPressed) {
+          if (isRunning) togglePause();
+        }
+      } else if (btnIdx === 5) {
+        // B/Y button - hold for VR exit
+        if (isPressed) {
+          anyYHeld = true;
+        }
+      }
+      prevButtonStates[key] = isPressed;
+    });
+  });
+
+  // Handle B/Y long press
+  if (anyYHeld) {
+    if (yButtonHeldSince === null) {
+      yButtonHeldSince = performance.now();
+    } else if (performance.now() - yButtonHeldSince >= VR_EXIT_HOLD_MS) {
+      yButtonHeldSince = null;
+      if (app?.xr?.active) { try { app.xr.end(); } catch(e){} }
+    }
+  } else {
+    yButtonHeldSince = null;
+  }
+}
+
+// ── Orbit ──────────────────────────────────────────────
+function setupOrbitControls(canvas) {
+  orbitState = { yaw: 0, pitch: 0, distance: 4, target: new Vec3(0, 0, -1.4) };
+  let dragging = false, panning = false, prevX = 0, prevY = 0, lastTouchDist = 0;
+  function apply() {
+    if (inVR) return;
+    const cp = Math.cos(orbitState.pitch);
+    const x = orbitState.target.x + orbitState.distance * Math.sin(orbitState.yaw) * cp;
+    const y = orbitState.target.y + orbitState.distance * Math.sin(orbitState.pitch);
+    const z = orbitState.target.z + orbitState.distance * Math.cos(orbitState.yaw) * cp;
+    cameraEntity.setPosition(x, y, z);
+    cameraEntity.lookAt(orbitState.target);
+  }
+  orbitState.apply = apply; apply();
+
+  canvas.addEventListener('mousedown', e => {dragging=true; panning=e.button===2||e.shiftKey; prevX=e.clientX; prevY=e.clientY; e.preventDefault();});
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  window.addEventListener('mouseup', () => {dragging=false; panning=false;});
+  window.addEventListener('mousemove', e => {
+    if (!dragging || inVR) return;
+    const dx = e.clientX-prevX, dy = e.clientY-prevY;
+    if (panning) {
+      const s = 0.003 * orbitState.distance;
+      orbitState.target.x -= Math.cos(orbitState.yaw)*dx*s;
+      orbitState.target.z += Math.sin(orbitState.yaw)*dx*s;
+      orbitState.target.y += dy*s;
+    } else {
+      orbitState.yaw -= dx*0.005;
+      orbitState.pitch = Math.max(-Math.PI/2+0.05, Math.min(Math.PI/2-0.05, orbitState.pitch+dy*0.005));
+    }
+    prevX=e.clientX; prevY=e.clientY; apply();
+  });
+  canvas.addEventListener('wheel', e => {
+    if (inVR) return; e.preventDefault();
+    orbitState.distance = Math.max(0.3, Math.min(100, orbitState.distance*(e.deltaY>0?1.1:0.9)));
+    apply();
+  }, {passive:false});
+  canvas.addEventListener('touchstart', e => {
+    if (inVR) return;
+    if (e.touches.length===1) {dragging=true; prevX=e.touches[0].clientX; prevY=e.touches[0].clientY;}
+    else if (e.touches.length===2) {const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY; lastTouchDist=Math.sqrt(dx*dx+dy*dy);}
+  }, {passive:false});
+  canvas.addEventListener('touchmove', e => {
+    if (inVR) return; e.preventDefault();
+    if (e.touches.length===1 && dragging) {
+      const dx=e.touches[0].clientX-prevX, dy=e.touches[0].clientY-prevY;
+      orbitState.yaw -= dx*0.005;
+      orbitState.pitch = Math.max(-Math.PI/2+0.05, Math.min(Math.PI/2-0.05, orbitState.pitch+dy*0.005));
+      prevX=e.touches[0].clientX; prevY=e.touches[0].clientY; apply();
+    } else if (e.touches.length===2) {
+      const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      if (lastTouchDist>0) {orbitState.distance=Math.max(0.3,Math.min(100,orbitState.distance*lastTouchDist/dist)); apply();}
+      lastTouchDist=dist;
+    }
+  }, {passive:false});
+  canvas.addEventListener('touchend', () => {dragging=false; lastTouchDist=0;});
+}
+
+// ── Splat loading ──────────────────────────────────────
+function loadSplatFile(file) {
+  return new Promise((resolve, reject) => {
+    const blobUrl = URL.createObjectURL(file);
+    const asset = new Asset(file.name, 'gsplat', {url: blobUrl, filename: file.name});
+    asset.once('load', () => resolve({asset, blobUrl}));
+    asset.once('error', err => {URL.revokeObjectURL(blobUrl); reject(new Error(String(err)));});
+    app.assets.add(asset); app.assets.load(asset);
+  });
+}
+
+function disposeCurrentSplat() {
+  if (currentSplatEntity) {
+    // Clean up photo texture if present
+    if (currentSplatEntity._photoTexture) {
+      try { currentSplatEntity._photoTexture.destroy(); } catch(e){}
+    }
+    currentSplatEntity.destroy(); currentSplatEntity=null;
+  }
+  if (currentAsset) {try{app.assets.remove(currentAsset); currentAsset.unload();}catch(e){} currentAsset=null;}
+  if (currentBlobUrl) {URL.revokeObjectURL(currentBlobUrl); currentBlobUrl=null;}
+}
+
+function loadImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const blobUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const texture = new Texture(app.graphicsDevice, {
+        width: img.width, height: img.height,
+        format: PIXELFORMAT_RGBA8,
+        addressU: ADDRESS_CLAMP_TO_EDGE,
+        addressV: ADDRESS_CLAMP_TO_EDGE,
+        minFilter: FILTER_LINEAR,
+        magFilter: FILTER_LINEAR,
+        mipmaps: true
+      });
+      texture.setSource(img);
+      resolve({ texture, blobUrl, width: img.width, height: img.height });
+    };
+    img.onerror = err => {
+      URL.revokeObjectURL(blobUrl);
+      reject(new Error('image load failed'));
+    };
+    img.src = blobUrl;
+  });
+}
+
+async function loadSlideData(index) {
+  disposeCurrentSplat();
+  currentIndex = ((index % splatFiles.length) + splatFiles.length) % splatFiles.length;
+  const file = splatFiles[currentIndex];
+  currentNameEl.textContent = file.name;
+  updateHUD();
+  animProgress = 0;
+  try {
+    if (isImage(file.name)) {
+      // Load as 2D photo plane
+      const { texture, blobUrl, width, height } = await loadImageFile(file);
+      currentBlobUrl = blobUrl;
+      const mat = new StandardMaterial();
+      mat.emissiveMap = texture;
+      mat.emissive = new Color(1, 1, 1);
+      mat.diffuse = new Color(0, 0, 0);
+      mat.useLighting = false;
+      mat.cull = CULLFACE_NONE;
+      mat.update();
+      currentSplatEntity = new Entity('photo-' + currentIndex);
+      currentSplatEntity.addComponent('render', { type: 'plane', material: mat });
+      // Photo plane: face camera (rotate -90 X), preserve aspect ratio
+      // Default size: 2 meters tall, scale X by aspect ratio
+      const aspect = width / height;
+      const baseHeight = 1.8;
+      const baseWidth = baseHeight * aspect;
+      // Plane is on XZ by default. We want it facing +Z (toward camera)
+      currentSplatEntity.setLocalEulerAngles(90, 0, 0);
+      currentSplatEntity.setLocalScale(baseWidth, 1, baseHeight);
+      app.root.addChild(currentSplatEntity);
+      // Save texture reference for cleanup
+      currentSplatEntity._photoTexture = texture;
+      currentSplatEntity._photoMaterial = mat;
+      applySplatTransform();
+      if (!inVR) autoFrameCamera();
+    } else {
+      // Load as 3DGS
+      const {asset, blobUrl} = await loadSplatFile(file);
+      currentAsset = asset; currentBlobUrl = blobUrl;
+      currentSplatEntity = new Entity('splat-' + currentIndex);
+      currentSplatEntity.addComponent('gsplat', { asset });
+      currentSplatEntity.setEulerAngles(180, 0, 0);
+      app.root.addChild(currentSplatEntity);
+      applySplatTransform();
+      if (!inVR) autoFrameCamera();
+    }
+  } catch(e) {
+    console.error(e); showToast(`読み込み失敗: ${file.name}`);
+  }
+}
+
+async function showSlide(index) {
+  if (isLoading) return;
+  isLoading = true; loadingEl.classList.add('show');
+  const isFirst = currentIndex === -1;
+  if (isFirst) {
+    slideCount = 0;
+    fadeOpacity = 1; applyFadeOpacity();
+    await loadSlideData(index);
+    await fadeTo(0, fadeTimeMs);
+  } else {
+    await fadeTo(1, fadeTimeMs);
+    slideCount++;
+    await loadSlideData(index);
+    await fadeTo(0, fadeTimeMs);
+  }
+  isLoading = false; loadingEl.classList.remove('show');
+}
+
+function autoFrameCamera() {
+  if (!currentSplatEntity || inVR) return;
+  // Photo case: simple framing
+  if (currentSplatEntity._photoTexture) {
+    orbitState.target.x = basePos.x;
+    orbitState.target.y = basePos.y;
+    orbitState.target.z = basePos.z;
+    orbitState.distance = 3;
+    orbitState.apply();
+    return;
+  }
+  // 3DGS case
+  try {
+    const gs = currentSplatEntity.gsplat;
+    const aabb = gs?.customAabb || gs?.instance?.meshInstance?.aabb || gs?.instance?.aabb;
+    if (aabb?.halfExtents) {
+      const ext = aabb.halfExtents;
+      const radius = Math.max(ext.x, ext.y, ext.z);
+      if (radius > 0 && isFinite(radius)) {
+        if (aabb.center) {orbitState.target.x=aabb.center.x+basePos.x; orbitState.target.z=aabb.center.z+basePos.z;}
+        orbitState.distance = Math.max(2, radius*2.5);
+        orbitState.apply();
+      }
+    }
+  } catch(e){}
+}
+
+// ── Slideshow control ──────────────────────────────────
+async function enterVRSetup() {
+  readCfg();
+  if (!app) initApp();
+  if (!app.xr?.supported) {showToast('VR非対応'); return;}
+  if (particlesEnabled) buildParticles();
+  ensureHandModels().catch(e => console.warn('hand models:', e));
+
+  // Initialize AudioContext immediately (needs user gesture)
+  if (audioFiles.length > 0 && !audioCtx) {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch(e) { console.warn('audio context init:', e); }
+  }
+  // Load audio buffers in background (don't await - avoid blocking VR start)
+  if (audioFiles.length > 0) {
+    loadAudioBuffers().catch(e => console.warn('audio load:', e));
+  }
+
+  setupEl.classList.add('hidden');
+  cameraEntity.camera.startXr('immersive-vr', 'local-floor', {
+    optionalFeatures: ['hand-tracking'],
+    callback: err => {
+      if (err) {showToast('VR起動失敗: '+(err.message||err)); setupEl.classList.remove('hidden');}
+    }
+  });
+}
+
+async function startSlideshowVR() {
+  isRunning = true; isPaused = false;
+  startAudio();
+  await showSlide(0);
+  scheduleNext();
+}
+
+function scheduleNext() {
+  clearTimeout(timer); cancelAnimationFrame(progressRAF);
+  if (!isRunning || isPaused) return;
+  timerStartedAt = performance.now();
+  const duration = intervalSec * 1000;
+  const tick = () => {
+    if (!isRunning || isPaused) return;
+    const elapsed = performance.now() - timerStartedAt;
+    const remaining = Math.max(0, duration - elapsed);
+    progressBarEl.style.width = `${(elapsed/duration)*100}%`;
+    nextTimerEl.textContent = `${Math.ceil(remaining/1000)}s`;
+    if (remaining > 0) progressRAF = requestAnimationFrame(tick);
+  };
+  progressRAF = requestAnimationFrame(tick);
+  timer = setTimeout(async () => {
+    if (!isRunning || isPaused) return;
+    const isLast = currentIndex === splatFiles.length - 1;
+    if (isLast && (autoEndAfterMusic || !repeatModel)) {
+      await fadeTo(1, fadeTimeMs);
+      disposeCurrentSplat();
+      isRunning = false;
+      progressBarEl.style.width = '0%';
+      nextTimerEl.textContent = '--s';
+      return;
+    }
+    await showSlide(currentIndex + 1);
+    scheduleNext();
+  }, duration);
+}
+
+async function manualAdvance(dir) {
+  if (!isRunning || isLoading) return;
+  clearTimeout(timer); cancelAnimationFrame(progressRAF);
+  await showSlide(currentIndex + dir);
+  if (!isPaused) scheduleNext();
+}
+
+function togglePause() {
+  if (!isRunning) return;
+  isPaused = !isPaused;
+  pauseBtn.textContent = isPaused ? '▶ RESUME' : '⏸ PAUSE';
+  if (isPaused) {pauseAudio(); clearTimeout(timer); cancelAnimationFrame(progressRAF);}
+  else {resumeAudio(); scheduleNext();}
+}
+
+function endSlideshow() {
+  isRunning = false; isPaused = false;
+  clearTimeout(timer); cancelAnimationFrame(progressRAF);
+  onFadeComplete = null; fadeOpacity = 0; fadeTarget = 0; applyFadeOpacity();
+  stopAudio();
+  if (app?.xr?.active) {try{app.xr.end();}catch(e){}}
+  disposeParticles(); particleMat = null;
+  disposeHandModels();
+  disposeCurrentSplat();
+  if (app) {try{app.destroy();}catch(e){} app=null;}
+  viewerContainerEl.innerHTML = '';
+  cameraEntity=null; fadePlane=null; fadeMaterial=null; orbitState=null;
+  currentIndex = -1; animProgress = 0; slideCount = 0;
+  hudEl.classList.add('hidden'); setupEl.classList.remove('hidden');
+  pauseBtn.textContent = '⏸ PAUSE'; progressBarEl.style.width = '0%';
+}
+
+function enterVR() {
+  if (!app?.xr?.supported || !cameraEntity) {showToast('VR非対応'); return;}
+  if (app.xr.active) return;
+  cameraEntity.camera.startXr('immersive-vr', 'local-floor', {
+    optionalFeatures: ['hand-tracking'],
+    callback: err => {if(err) showToast('VR起動失敗: '+(err.message||err));}
+  });
+}
+
+function updateHUD() { slideCounterEl.textContent = `${currentIndex+1} / ${splatFiles.length}`; }
+
+// ── Wire up ────────────────────────────────────────────
+vrStartBtn.addEventListener('click', enterVRSetup);
+endBtn.addEventListener('click', endSlideshow);
+nextBtn.addEventListener('click', () => manualAdvance(1));
+prevBtn.addEventListener('click', () => manualAdvance(-1));
+pauseBtn.addEventListener('click', togglePause);
+vrBtn.addEventListener('click', enterVR);
+
+// Download config as JSON
+$('download-config-btn').addEventListener('click', () => {
+  const cfg = {
+    interval: parseFloat($('interval').value),
+    fadeTime: parseFloat($('fade-time').value),
+    autoInterval: $('auto-interval').checked,
+    basePos: {
+      x: parseFloat($('s-x').value),
+      y: parseFloat($('s-y').value),
+      z: parseFloat($('s-z').value)
+    },
+    anim: {
+      xs: parseFloat($('ax-start').value),
+      xe: parseFloat($('ax-end').value),
+      ys: parseFloat($('ay-start').value),
+      ye: parseFloat($('ay-end').value),
+      zs: parseFloat($('az-start').value),
+      ze: parseFloat($('az-end').value)
+    },
+    animReverse: {
+      x: $('rev-x').checked,
+      y: $('rev-y').checked,
+      z: $('rev-z').checked
+    },
+    bgColor: $('bg-color').value,
+    handColor: $('hand-color').value,
+    particles: {
+      enabled: $('particles-enabled').checked,
+      count: Math.round(parseFloat($('p-count').value)),
+      size: parseFloat($('p-size').value),
+      speed: parseFloat($('p-speed').value),
+      brightness: parseFloat($('p-bright').value),
+      opacity: parseFloat($('p-opacity').value),
+      color: $('p-color').value,
+      motion: $('p-motion').value,
+      visibility: $('p-visibility').value,
+      depthTest: $('p-depth-test').checked
+    },
+    repeat: {
+      model: $('repeat-model').checked,
+      music: $('repeat-music').checked
+    }
+  };
+
+  // Generate filename with timestamp: 3dgsset_YYYYMMDD_HHMMSS.json
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const filename = `3dgsset_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.json`;
+
+  const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  showToast(`${filename} をダウンロード`, 'info');
+});
+
+$('reset-btn').addEventListener('click', () => {
+  const r = (id, valId, val, fmt) => {
+    const el = $(id); if (!el) return;
+    el.value = val;
+    const vel = $(valId);
+    if (vel) vel.textContent = fmt ? fmt(val) : val;
+    el.dispatchEvent(new Event('input'));
+  };
+  r('s-x','v-x',0,v=>v.toFixed(2));
+  r('s-y','v-y',1,v=>v.toFixed(2));
+  r('s-z','v-z',0,v=>v.toFixed(2));
+  r('ax-start','vax-start',0,v=>v.toFixed(2));
+  r('ax-end','vax-end',0,v=>v.toFixed(2));
+  r('ay-start','vay-start',0,v=>v.toFixed(2));
+  r('ay-end','vay-end',0,v=>v.toFixed(2));
+  r('az-start','vaz-start',0,v=>v.toFixed(2));
+  r('az-end','vaz-end',-0.4,v=>v.toFixed(2));
+  $('rev-x').checked = false; $('rev-y').checked = false; $('rev-z').checked = false;
+  showToast('リセットしました', 'info');
+});
+
+window.addEventListener('keydown', e => {
+  if (inVR) return;
+  if (!isRunning) return;
+  if (e.key === 'ArrowRight' || e.key === 'n') manualAdvance(1);
+  else if (e.key === 'ArrowLeft' || e.key === 'p') manualAdvance(-1);
+  else if (e.key === ' ') {e.preventDefault(); togglePause();}
+  else if (e.key === 'Escape') endSlideshow();
+  else if (e.key === 'v') enterVR();
+});
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
+// ── Initialize ─────────────────────────────────────────
+attachStepButtons();
+initUI();
+
+</script>
+</body>
+</html>
