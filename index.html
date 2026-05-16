@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v3.3</span>
+      <span class="version">v3.4</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -1043,10 +1043,18 @@ function playAudioBuffer(idx) {
 }
 
 function startAudio() {
-  if (!audioBuffers.length) return;
+  if (!audioFiles.length) return;
   audioIndex = 0; musicEnded = false;
   if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-  playAudioBuffer(0);
+  // Wait for buffers to be ready if still loading
+  const tryPlay = () => {
+    if (audioBuffers.length > 0) {
+      playAudioBuffer(0);
+    } else if (audioBuffersLoading) {
+      setTimeout(tryPlay, 100);
+    }
+  };
+  tryPlay();
 }
 
 function stopAudio() {
