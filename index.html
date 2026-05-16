@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v3.1</span>
+      <span class="version">v3.2</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -1410,14 +1410,7 @@ function createEndText() {
   endTextEntity.addComponent('render', {type:'plane', material:endTextMat});
   endTextEntity.setLocalEulerAngles(-90, 0, 0);
   endTextEntity.setLocalScale(2, 1, 0.5);
-  // Place 2m in front of camera current position in world space
-  const camPos = cameraEntity.getPosition();
-  const camFwd = cameraEntity.forward;
-  endTextEntity.setPosition(
-    camPos.x + camFwd.x * 8,
-    camPos.y + camFwd.y * 8,
-    camPos.z + camFwd.z * 8
-  );
+  endTextEntity.setPosition(0, 0, -8);
   app.root.addChild(endTextEntity);
   // Don't start fade here - showEndText will trigger it
   endFadeOpacity = 0;
