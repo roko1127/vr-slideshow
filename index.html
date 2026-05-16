@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v2.1</span>
+      <span class="version">v2.2</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -439,6 +439,7 @@
   <div class="row"><span class="key">NEXT IN</span><span class="val" id="next-timer">--s</span></div>
   <div class="row"><span class="key">MUSIC RPT</span><span class="val" id="debug-repeat">--</span></div>
   <div class="row"><span class="key">AUDIO IDX</span><span class="val" id="debug-audio">--</span></div>
+  <div class="row"><span class="key">END STATE</span><span class="val" id="debug-end" style="font-size:9px">--</span></div>
   <div id="progress"><div id="progress-bar"></div></div>
   <div class="name" id="current-name"></div>
   <div class="buttons">
@@ -1293,8 +1294,10 @@ function initApp() {
     // Debug display
     const dr = document.getElementById('debug-repeat');
     const da = document.getElementById('debug-audio');
+    const de = document.getElementById('debug-end');
     if (dr) dr.textContent = repeatMusic ? 'ON' : 'OFF';
     if (da) da.textContent = `${audioIndex}/${audioBuffers.length} ended:${musicEnded}`;
+    if (de) de.textContent = `end:${endTextEntity?'YES':'NO'} fading:${endFading} op:${endFadeOpacity.toFixed(2)}`;
   });
   window.addEventListener('resize', () => app.resizeCanvas());
   app.start();
@@ -1797,10 +1800,12 @@ function scheduleNext() {
     if (!isRunning || isPaused) return;
     const isLast = currentIndex === splatFiles.length - 1;
     if (isLast && (autoEndAfterMusic || !repeatModel)) {
+      showToast(`END sequence: showEnd=${showEnd} isLast=${isLast}`, 'info');
       await fadeTo(1, fadeTimeMs);
       disposeCurrentSplat();
       if (showEnd) {
         createEndText();
+        showToast(`createEndText done: entity=${endTextEntity?'YES':'NO'}`, 'info');
         await fadeTo(0, fadeTimeMs);
         showEndText();
       }
