@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v2.8</span>
+      <span class="version">v2.9</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -1392,7 +1392,7 @@ function createEndText() {
   texture.setSource(canvas);
 
   endTextMat = new StandardMaterial();
-  endTextMat.emissive = new Color(0, 0, 0);
+  endTextMat.emissive = new Color(1, 1, 1);
   endTextMat.emissiveMap = texture;
   endTextMat.opacity = 0;
   endTextMat.blendType = BLEND_NORMAL;
