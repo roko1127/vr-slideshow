@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v2.2</span>
+      <span class="version">v2.3</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -1403,7 +1403,9 @@ function createEndText() {
 
   endTextEntity = new Entity('end-text');
   endTextEntity.addComponent('render', { type: 'plane', material: endTextMat });
-  endTextEntity.setEulerAngles(90, 0, 0);
+  // PlayCanvas plane is XZ by default (horizontal). Rotate -90 on X to make it vertical (facing camera)
+  endTextEntity.setEulerAngles(-90, 0, 0);
+  // Scale: width=2m, depth(height)=0.5m
   endTextEntity.setLocalScale(2.0, 1, 0.5);
   endTextEntity.setPosition(
     basePos.x + endOffsetX,
