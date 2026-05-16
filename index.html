@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v3.0</span>
+      <span class="version">v3.1</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -1414,15 +1414,14 @@ function createEndText() {
   const camPos = cameraEntity.getPosition();
   const camFwd = cameraEntity.forward;
   endTextEntity.setPosition(
-    camPos.x + camFwd.x * 2,
-    camPos.y + camFwd.y * 2,
-    camPos.z + camFwd.z * 2
+    camPos.x + camFwd.x * 8,
+    camPos.y + camFwd.y * 8,
+    camPos.z + camFwd.z * 8
   );
   app.root.addChild(endTextEntity);
-
-  // Start fade-in via app update loop
+  // Don't start fade here - showEndText will trigger it
   endFadeOpacity = 0;
-  endFading = true;
+  endFading = false;
 }
 
 function updateEndFade(dt) {
@@ -1434,9 +1433,9 @@ function updateEndFade(dt) {
 }
 
 function showEndText() {
-  // Fade is handled by updateEndFade in app.on('update')
-  endFading = true;
+  if (!endTextEntity || !endTextMat) return;
   endFadeOpacity = 0;
+  endFading = true;
 }
 
 function disposeEndText() {
