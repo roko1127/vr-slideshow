@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v2.5</span>
+      <span class="version">v2.6</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -1409,17 +1409,12 @@ function createEndText() {
 
   endTextEntity = new Entity('end-text');
   endTextEntity.addComponent('render', { type: 'plane', material: endTextMat });
-  // PlayCanvas plane is XZ by default (horizontal). Rotate -90 on X to make it vertical (facing camera)
-  endTextEntity.setEulerAngles(-90, 0, 0);
-  // Scale: width=2m, depth(height)=0.5m
+  endTextEntity.setLocalEulerAngles(-90, 0, 0);
   endTextEntity.setLocalScale(2.0, 1, 0.5);
-  endTextEntity.setPosition(
-    basePos.x + endOffsetX,
-    basePos.y + endOffsetY,
-    basePos.z - endOffsetZ
-  );
+  // Attach to camera like fade plane - always in front
+  endTextEntity.setLocalPosition(0, 0, -3);
   endTextEntity.enabled = true;
-  app.root.addChild(endTextEntity);
+  cameraEntity.addChild(endTextEntity);
 
   // Start fade-in via app update loop
   endFadeOpacity = 0;
