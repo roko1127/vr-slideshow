@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v3.2</span>
+      <span class="version">v3.3</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -995,20 +995,31 @@ function applyConfigFromJson(cfg) {
 
 // ── Web Audio API ──────────────────────────────────────
 let audioBuffersLoading = false;
+let audioLoadSession = 0;
 async function loadAudioBuffers() {
   if (!audioFiles.length) return;
-  if (audioBuffersLoading) return; // prevent double load
+  if (audioBuffersLoading) return;
   audioBuffersLoading = true;
+  audioLoadSession++;
+  const mySession = audioLoadSession;
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
-  audioBuffers = [];
+  const newBuffers = [];
   for (const f of audioFiles) {
     try {
       const arrayBuffer = await f.arrayBuffer();
       const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-      audioBuffers.push(decoded);
+      // If session changed (reset happened), discard results
+      if (mySession !== audioLoadSession) {
+        audioBuffersLoading = false;
+        return;
+      }
+      newBuffers.push(decoded);
     } catch(e) { console.warn('audio decode failed:', f.name, e); }
+  }
+  if (mySession === audioLoadSession) {
+    audioBuffers = newBuffers;
   }
   audioBuffersLoading = false;
 }
@@ -1733,15 +1744,16 @@ function autoFrameCamera() {
 // ── Slideshow control ──────────────────────────────────
 async function enterVRSetup() {
   readCfg();
-  // Clean up any leftover END text from previous session
   disposeEndText();
   if (!app) {
     initApp();
-    // Wait for PlayCanvas app to fully start
+    // Wait for app.xr to be available (XRManager initializes after app.start())
     await new Promise(resolve => {
-      if (app.scene) { resolve(); return; }
-      app.once('start', resolve);
-      setTimeout(resolve, 500); // fallback
+      const check = () => {
+        if (app.xr && app.xr.supported !== undefined) { resolve(); return; }
+        setTimeout(check, 50);
+      };
+      setTimeout(check, 50);
     });
   }
   if (!app.xr?.supported) {showToast('VR非対応'); return;}
@@ -1765,6 +1777,7 @@ async function enterVRSetup() {
     callback: err => {
       if (err) {
         showToast('VR起動失敗: '+(err.message||err));
+        audioLoadSession++; // invalidate any in-flight audio loading
         audioBuffers = [];
         audioBuffersLoading = false;
         setupEl.classList.remove('hidden');
