@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v3.5</span>
+      <span class="version">v3.6</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -235,6 +235,16 @@
         <span class="s-key">フェード時間</span>
         <input type="range" id="fade-time" min="0" max="5" step="0.1" value="1.5">
         <span class="s-val" id="vfade-time">1.5</span>
+      </div>
+      <div class="s-row">
+        <span class="s-key">最初フェード</span>
+        <input type="range" id="fade-first" min="0" max="10" step="0.1" value="1.5">
+        <span class="s-val" id="vfade-first">1.5</span>
+      </div>
+      <div class="s-row">
+        <span class="s-key">最後フェード</span>
+        <input type="range" id="fade-last" min="0" max="10" step="0.1" value="1.5">
+        <span class="s-val" id="vfade-last">1.5</span>
       </div>
       <div class="s-row" id="lag-row">
         <span class="s-key">ラグ補正</span>
@@ -485,6 +495,8 @@ let splatFiles = [], audioFiles = [], audioIndex = 0;
 let audioCtx = null, audioSource = null, audioBuffers = [];
 let intervalSec = 15, currentIndex = -1;
 let fadeTimeMs = 1500;
+let fadeFirstMs = 1500;
+let fadeLastMs = 1500;
 let lagOffset = 0.25;
 let autoInterval = false;
 let totalMusicDuration = 0; // sum of all audio durations in seconds
@@ -584,7 +596,7 @@ function hexToRgb01(hex) {
 
 // ── Settings UI ────────────────────────────────────────
 function attachStepButtons() {
-  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time','lag-offset','end-ox','end-oy','end-oz'];
+  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time','fade-first','fade-last','lag-offset','end-ox','end-oy','end-oz'];
   sliderIds.forEach(id => {
     const slider = $(id);
     if (!slider) return;
@@ -625,6 +637,8 @@ function initUI() {
   bindSlider('s-y','v-y', v=>v.toFixed(2), v=>{basePos.y=v; applySplatTransform();});
   bindSlider('s-z','v-z', v=>v.toFixed(2), v=>{basePos.z=v; applySplatTransform();});
   bindSlider('fade-time','vfade-time', v=>v.toFixed(1), v=>{fadeTimeMs=v*1000; updateAutoIntervalDisplay();});
+  bindSlider('fade-first','vfade-first', v=>v.toFixed(1), v=>{fadeFirstMs=v*1000;});
+  bindSlider('fade-last','vfade-last', v=>v.toFixed(1), v=>{fadeLastMs=v*1000;});
   bindSlider('lag-offset','vlag-offset', v=>v.toFixed(2), v=>{lagOffset=v; updateAutoIntervalDisplay();});
   bindSlider('ax-start','vax-start', v=>v.toFixed(2), v=>{anim.xs=v;});
   bindSlider('ax-end','vax-end', v=>v.toFixed(2), v=>{anim.xe=v;});
@@ -693,6 +707,8 @@ function initUI() {
 function readCfg() {
   intervalSec = Math.max(0.1, parseFloat(intervalEl.value) || 15);
   fadeTimeMs = Math.max(0, parseFloat($('fade-time').value) * 1000);
+  fadeFirstMs = Math.max(0, parseFloat($('fade-first').value) * 1000);
+  fadeLastMs = Math.max(0, parseFloat($('fade-last').value) * 1000);
   lagOffset = parseFloat($('lag-offset').value);
   autoInterval = $('auto-interval').checked;
   // If auto-interval is on, compute and override intervalSec
@@ -1472,9 +1488,11 @@ function disposeEndText() {
 }
 // ── XR ─────────────────────────────────────────────────
 // Controller button state tracking
-let prevButtonStates = {}; // 'inputSourceIdx-buttonIdx' → wasPressed
-let yButtonHeldSince = null; // timestamp when B/Y started being held
+let prevButtonStates = {};
+let bButtonHeldSince = null; // B button for VR exit
+let yButtonHeldSince = null; // Y button for restart
 const VR_EXIT_HOLD_MS = 1500;
+const VR_RESTART_HOLD_MS = 1500;
 
 function setupXR() {
   if (!app.xr || !app.xr.supported) {
@@ -1484,7 +1502,7 @@ function setupXR() {
   }
   app.xr.on('start', () => {
     inVR = true; hudEl.classList.add('hidden');
-    prevButtonStates = {}; yButtonHeldSince = null;
+    prevButtonStates = {}; bButtonHeldSince = null; yButtonHeldSince = null;
   });
   app.xr.on('end', () => {
     inVR = false;
@@ -1512,17 +1530,18 @@ function setupXR() {
 // Poll controller buttons each frame for A/X (pause) and B/Y (exit)
 function updateControllerButtons(dt) {
   if (!inVR || !app?.xr?.input || handTrackingActive) {
+    bButtonHeldSince = null;
     yButtonHeldSince = null;
     return;
   }
   const sources = app.xr.input.inputSources || [];
+  let anyBHeld = false;
   let anyYHeld = false;
 
   sources.forEach((src, srcIdx) => {
-    if (src.hand) return; // skip hand-tracked
+    if (src.hand) return;
     const gamepad = src.gamepad;
     if (!gamepad || !gamepad.buttons) return;
-    // Quest controller mapping: button 4 = A/X, button 5 = B/Y
     const handedness = src.handedness;
     [4, 5].forEach(btnIdx => {
       const btn = gamepad.buttons[btnIdx];
@@ -1530,33 +1549,40 @@ function updateControllerButtons(dt) {
       const key = `${srcIdx}-${btnIdx}`;
       const isPressed = btn.pressed;
       const wasPressed = prevButtonStates[key];
-
       if (btnIdx === 4) {
-        // A/X button - toggle pause on press (not hold)
+        // A/X - toggle pause
         if (isPressed && !wasPressed) {
           if (isRunning) togglePause();
         }
       } else if (btnIdx === 5) {
-        // B/Y button - hold for VR exit
-        if (isPressed) {
-          anyYHeld = true;
+        // B (right) = VR exit, Y (left) = restart
+        if (handedness === 'right') {
+          if (isPressed) anyBHeld = true;
+        } else {
+          if (isPressed) anyYHeld = true;
         }
       }
       prevButtonStates[key] = isPressed;
     });
   });
 
-  // Handle B/Y long press
-  if (anyYHeld) {
-    if (yButtonHeldSince === null) {
-      yButtonHeldSince = performance.now();
-    } else if (performance.now() - yButtonHeldSince >= VR_EXIT_HOLD_MS) {
-      yButtonHeldSince = null;
+  // B long press → VR exit
+  if (anyBHeld) {
+    if (bButtonHeldSince === null) bButtonHeldSince = performance.now();
+    else if (performance.now() - bButtonHeldSince >= VR_EXIT_HOLD_MS) {
+      bButtonHeldSince = null;
       if (app?.xr?.active) { try { app.xr.end(); } catch(e){} }
     }
-  } else {
-    yButtonHeldSince = null;
-  }
+  } else { bButtonHeldSince = null; }
+
+  // Y long press → restart
+  if (anyYHeld) {
+    if (yButtonHeldSince === null) yButtonHeldSince = performance.now();
+    else if (performance.now() - yButtonHeldSince >= VR_RESTART_HOLD_MS) {
+      yButtonHeldSince = null;
+      restartSlideshow();
+    }
+  } else { yButtonHeldSince = null; }
 }
 
 // ── Orbit ──────────────────────────────────────────────
@@ -1721,11 +1747,13 @@ async function showSlide(index) {
   if (isLoading) return;
   isLoading = true; loadingEl.classList.add('show');
   const isFirst = currentIndex === -1;
+  const targetIndex = ((index % splatFiles.length) + splatFiles.length) % splatFiles.length;
+  const isLast = targetIndex === splatFiles.length - 1;
   if (isFirst) {
     slideCount = 0;
     fadeOpacity = 1; applyFadeOpacity();
     await loadSlideData(index);
-    await fadeTo(0, fadeTimeMs);
+    await fadeTo(0, fadeFirstMs);
   } else {
     await fadeTo(1, fadeTimeMs);
     slideCount++;
@@ -1833,7 +1861,7 @@ function scheduleNext() {
     const isLast = currentIndex === splatFiles.length - 1;
     if (isLast && (autoEndAfterMusic || !repeatModel)) {
       showToast(`END sequence: showEnd=${showEnd} isLast=${isLast}`, 'info');
-      await fadeTo(1, fadeTimeMs);
+      await fadeTo(1, fadeLastMs);
       disposeCurrentSplat();
       if (showEnd) {
         createEndText();
@@ -1864,6 +1892,30 @@ function togglePause() {
   pauseBtn.textContent = isPaused ? '▶ RESUME' : '⏸ PAUSE';
   if (isPaused) {pauseAudio(); clearTimeout(timer); cancelAnimationFrame(progressRAF);}
   else {resumeAudio(); scheduleNext();}
+}
+
+async function restartSlideshow() {
+  if (!isRunning && currentIndex === -1) return;
+  // Stop current playback
+  clearTimeout(timer); cancelAnimationFrame(progressRAF);
+  isPaused = false;
+  isRunning = false;
+  isLoading = false;
+  onFadeComplete = null;
+  // Stop audio
+  stopAudio();
+  // Dispose current splat and END text
+  disposeCurrentSplat();
+  disposeEndText();
+  // Reset state
+  currentIndex = -1;
+  animProgress = 0;
+  slideCount = 0;
+  fadeOpacity = 1; applyFadeOpacity();
+  progressBarEl.style.width = '0%';
+  pauseBtn.textContent = '⏸ PAUSE';
+  // Restart from beginning
+  await startSlideshowVR();
 }
 
 function endSlideshow() {
