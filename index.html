@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v3.6</span>
+      <span class="version">v3.7</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -1055,7 +1055,11 @@ async function loadAudioBuffers() {
 
 function playAudioBuffer(idx) {
   if (!audioCtx || !audioBuffers.length) return;
-  if (audioSource) { try { audioSource.stop(); } catch(e){} audioSource = null; }
+  if (audioSource) {
+    try { audioSource.onended = null; } catch(e){}
+    try { audioSource.stop(); } catch(e){}
+    audioSource = null;
+  }
   const buf = audioBuffers[idx % audioBuffers.length];
   audioSource = audioCtx.createBufferSource();
   audioSource.buffer = buf;
@@ -1087,7 +1091,11 @@ function startAudio() {
 }
 
 function stopAudio() {
-  if (audioSource) { try { audioSource.stop(); } catch(e){} audioSource = null; }
+  if (audioSource) {
+    try { audioSource.onended = null; } catch(e){}
+    try { audioSource.stop(); } catch(e){}
+    audioSource = null;
+  }
   if (audioCtx) { try { audioCtx.suspend(); } catch(e){} }
 }
 function pauseAudio() { if (audioCtx) audioCtx.suspend(); }
@@ -1902,8 +1910,17 @@ async function restartSlideshow() {
   isRunning = false;
   isLoading = false;
   onFadeComplete = null;
-  // Stop audio
-  stopAudio();
+  // Fully stop audio
+  if (audioSource) {
+    try { audioSource.onended = null; } catch(e){}
+    try { audioSource.stop(); } catch(e){}
+    audioSource = null;
+  }
+  audioIndex = 0;
+  musicEnded = false;
+  if (audioCtx && audioCtx.state === 'suspended') {
+    try { audioCtx.resume(); } catch(e){}
+  }
   // Dispose current splat and END text
   disposeCurrentSplat();
   disposeEndText();
@@ -1922,7 +1939,21 @@ function endSlideshow() {
   isRunning = false; isPaused = false;
   clearTimeout(timer); cancelAnimationFrame(progressRAF);
   onFadeComplete = null; fadeOpacity = 0; fadeTarget = 0; applyFadeOpacity();
-  stopAudio();
+  // Fully stop audio and close context
+  audioLoadSession++; // invalidate any in-flight loading
+  if (audioSource) {
+    try { audioSource.onended = null; } catch(e){}
+    try { audioSource.stop(); } catch(e){}
+    audioSource = null;
+  }
+  if (audioCtx) {
+    try { audioCtx.close(); } catch(e){}
+    audioCtx = null;
+  }
+  audioBuffers = [];
+  audioBuffersLoading = false;
+  audioIndex = 0;
+  musicEnded = false;
   if (app?.xr?.active) {try{app.xr.end();}catch(e){}}
   disposeParticles(); particleMat = null;
   disposeHandModels();
