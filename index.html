@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v3.4</span>
+      <span class="version">v3.5</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -236,8 +236,14 @@
         <input type="range" id="fade-time" min="0" max="5" step="0.1" value="1.5">
         <span class="s-val" id="vfade-time">1.5</span>
       </div>
+      <div class="s-row" id="lag-row">
+        <span class="s-key">ラグ補正</span>
+        <input type="range" id="lag-offset" min="0" max="2" step="0.05" value="0.25">
+        <span class="s-val" id="vlag-offset">0.25</span>
+      </div>
       <p style="font-size:14px;color:var(--dim);margin-top:8px;line-height:1.6">
-        フェード時間: 暗転と表示にかかる秒数（0で即切替）
+        フェード時間: 暗転と表示にかかる秒数（0で即切替）<br>
+        ラグ補正: 自動計算時の読み込みラグ分を差し引く
       </p>
     </div>
 
@@ -479,6 +485,7 @@ let splatFiles = [], audioFiles = [], audioIndex = 0;
 let audioCtx = null, audioSource = null, audioBuffers = [];
 let intervalSec = 15, currentIndex = -1;
 let fadeTimeMs = 1500;
+let lagOffset = 0.25;
 let autoInterval = false;
 let totalMusicDuration = 0; // sum of all audio durations in seconds
 let autoEndAfterMusic = false; // when auto-interval is ON, stop after music ends
@@ -577,7 +584,7 @@ function hexToRgb01(hex) {
 
 // ── Settings UI ────────────────────────────────────────
 function attachStepButtons() {
-  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time','end-ox','end-oy','end-oz'];
+  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time','lag-offset','end-ox','end-oy','end-oz'];
   sliderIds.forEach(id => {
     const slider = $(id);
     if (!slider) return;
@@ -618,6 +625,7 @@ function initUI() {
   bindSlider('s-y','v-y', v=>v.toFixed(2), v=>{basePos.y=v; applySplatTransform();});
   bindSlider('s-z','v-z', v=>v.toFixed(2), v=>{basePos.z=v; applySplatTransform();});
   bindSlider('fade-time','vfade-time', v=>v.toFixed(1), v=>{fadeTimeMs=v*1000; updateAutoIntervalDisplay();});
+  bindSlider('lag-offset','vlag-offset', v=>v.toFixed(2), v=>{lagOffset=v; updateAutoIntervalDisplay();});
   bindSlider('ax-start','vax-start', v=>v.toFixed(2), v=>{anim.xs=v;});
   bindSlider('ax-end','vax-end', v=>v.toFixed(2), v=>{anim.xe=v;});
   bindSlider('ay-start','vay-start', v=>v.toFixed(2), v=>{anim.ys=v;});
@@ -685,13 +693,14 @@ function initUI() {
 function readCfg() {
   intervalSec = Math.max(0.1, parseFloat(intervalEl.value) || 15);
   fadeTimeMs = Math.max(0, parseFloat($('fade-time').value) * 1000);
+  lagOffset = parseFloat($('lag-offset').value);
   autoInterval = $('auto-interval').checked;
   // If auto-interval is on, compute and override intervalSec
   autoEndAfterMusic = false;
   if (autoInterval && audioFiles.length > 0 && splatFiles.length > 0 && totalMusicDuration > 0) {
     const fadeT = fadeTimeMs / 1000;
     const perSlide = totalMusicDuration / splatFiles.length;
-    const displayTime = perSlide - fadeT * 2;
+    const displayTime = perSlide - fadeT * 2 - lagOffset;
     if (displayTime > 0) {
       intervalSec = displayTime;
       autoEndAfterMusic = true;
@@ -926,14 +935,15 @@ async function updateAutoIntervalDisplay() {
     await calculateTotalMusicDuration();
   }
   const fadeT = parseFloat($('fade-time').value);
+  const lagT = parseFloat($('lag-offset').value);
   const perSlide = totalMusicDuration / splatFiles.length;
-  const displayTime = perSlide - fadeT * 2;
+  const displayTime = perSlide - fadeT * 2 - lagT;
   if (displayTime <= 0) {
     autoIntervalInfoEl.textContent = `⚠ フェード時間が長すぎます（音楽${totalMusicDuration.toFixed(1)}秒 / ${splatFiles.length}枚 = ${perSlide.toFixed(2)}秒/枚）`;
     return;
   }
   autoIntervalInfoEl.innerHTML = `✓ 自動計算: <b style="color:var(--fg)">${displayTime.toFixed(2)}秒/枚</b><br>` +
-    `<span style="color:var(--dim);font-size:12px">音楽 ${totalMusicDuration.toFixed(1)}秒 ÷ ${splatFiles.length}枚 − フェード ${fadeT.toFixed(1)}秒 × 2</span>`;
+    `<span style="color:var(--dim);font-size:12px">音楽 ${totalMusicDuration.toFixed(1)}秒 ÷ ${splatFiles.length}枚 − フェード ${fadeT.toFixed(1)}秒 × 2 − ラグ ${lagT.toFixed(2)}秒</span>`;
 }
 
 // ── JSON config ────────────────────────────────────────
@@ -957,6 +967,9 @@ function applyConfigFromJson(cfg) {
   if (cfg.interval !== undefined) intervalEl.value = cfg.interval;
   if (cfg.fadeTime !== undefined) {
     const el = $('fade-time'); if (el) { el.value = cfg.fadeTime; el.dispatchEvent(new Event('input')); }
+  }
+  if (cfg.lagOffset !== undefined) {
+    const el = $('lag-offset'); if (el) { el.value = cfg.lagOffset; el.dispatchEvent(new Event('input')); }
   }
   if (cfg.autoInterval !== undefined) {
     const el = $('auto-interval'); if (el) { el.checked = !!cfg.autoInterval; el.dispatchEvent(new Event('change')); }
@@ -1895,6 +1908,7 @@ $('download-config-btn').addEventListener('click', () => {
   const cfg = {
     interval: parseFloat($('interval').value),
     fadeTime: parseFloat($('fade-time').value),
+    lagOffset: parseFloat($('lag-offset').value),
     autoInterval: $('auto-interval').checked,
     basePos: {
       x: parseFloat($('s-x').value),
