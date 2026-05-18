@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v3.7</span>
+      <span class="version">v3.8</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -223,7 +223,7 @@
     <div class="section">
       <div class="label">04 ▸ 切替間隔</div>
       <div style="margin-bottom:14px">
-        <label class="check-label"><input type="checkbox" id="auto-interval"> 音楽の長さに合わせる</label>
+        <label class="check-label"><input type="checkbox" id="auto-interval" checked> 音楽の長さに合わせる</label>
       </div>
       <div id="auto-interval-info" style="display:none;font-size:14px;color:var(--accent);padding:10px 14px;border-left:3px solid var(--accent-dim);margin-bottom:16px;background:rgba(212,255,0,.04);line-height:1.6"></div>
       <div class="controls-row" style="margin-bottom:16px">
@@ -237,22 +237,18 @@
         <span class="s-val" id="vfade-time">1.5</span>
       </div>
       <div class="s-row">
-        <span class="s-key">最初フェード</span>
-        <input type="range" id="fade-first" min="0" max="10" step="0.1" value="1.5">
-        <span class="s-val" id="vfade-first">1.5</span>
+        <span class="s-key">初期ラグ</span>
+        <input type="range" id="start-lag" min="0" max="5" step="0.1" value="2">
+        <span class="s-val" id="vstart-lag">2.0</span>
       </div>
       <div class="s-row">
-        <span class="s-key">最後フェード</span>
-        <input type="range" id="fade-last" min="0" max="10" step="0.1" value="1.5">
-        <span class="s-val" id="vfade-last">1.5</span>
-      </div>
-      <div class="s-row" id="lag-row">
         <span class="s-key">ラグ補正</span>
         <input type="range" id="lag-offset" min="0" max="2" step="0.05" value="0.25">
         <span class="s-val" id="vlag-offset">0.25</span>
       </div>
       <p style="font-size:14px;color:var(--dim);margin-top:8px;line-height:1.6">
         フェード時間: 暗転と表示にかかる秒数（0で即切替）<br>
+        初期ラグ: 最初のスライド表示までの遅延（自動計算時のみ）<br>
         ラグ補正: 自動計算時の読み込みラグ分を差し引く
       </p>
     </div>
@@ -495,10 +491,9 @@ let splatFiles = [], audioFiles = [], audioIndex = 0;
 let audioCtx = null, audioSource = null, audioBuffers = [];
 let intervalSec = 15, currentIndex = -1;
 let fadeTimeMs = 1500;
-let fadeFirstMs = 1500;
-let fadeLastMs = 1500;
+let startLag = 2.0;
 let lagOffset = 0.25;
-let autoInterval = false;
+let autoInterval = true;
 let totalMusicDuration = 0; // sum of all audio durations in seconds
 let autoEndAfterMusic = false; // when auto-interval is ON, stop after music ends
 let timer = null, progressRAF = null, timerStartedAt = 0;
@@ -596,7 +591,7 @@ function hexToRgb01(hex) {
 
 // ── Settings UI ────────────────────────────────────────
 function attachStepButtons() {
-  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time','fade-first','fade-last','lag-offset','end-ox','end-oy','end-oz'];
+  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time','start-lag','lag-offset','end-ox','end-oy','end-oz'];
   sliderIds.forEach(id => {
     const slider = $(id);
     if (!slider) return;
@@ -637,8 +632,7 @@ function initUI() {
   bindSlider('s-y','v-y', v=>v.toFixed(2), v=>{basePos.y=v; applySplatTransform();});
   bindSlider('s-z','v-z', v=>v.toFixed(2), v=>{basePos.z=v; applySplatTransform();});
   bindSlider('fade-time','vfade-time', v=>v.toFixed(1), v=>{fadeTimeMs=v*1000; updateAutoIntervalDisplay();});
-  bindSlider('fade-first','vfade-first', v=>v.toFixed(1), v=>{fadeFirstMs=v*1000;});
-  bindSlider('fade-last','vfade-last', v=>v.toFixed(1), v=>{fadeLastMs=v*1000;});
+  bindSlider('start-lag','vstart-lag', v=>v.toFixed(1), v=>{startLag=v; updateAutoIntervalDisplay();});
   bindSlider('lag-offset','vlag-offset', v=>v.toFixed(2), v=>{lagOffset=v; updateAutoIntervalDisplay();});
   bindSlider('ax-start','vax-start', v=>v.toFixed(2), v=>{anim.xs=v;});
   bindSlider('ax-end','vax-end', v=>v.toFixed(2), v=>{anim.xe=v;});
@@ -707,15 +701,15 @@ function initUI() {
 function readCfg() {
   intervalSec = Math.max(0.1, parseFloat(intervalEl.value) || 15);
   fadeTimeMs = Math.max(0, parseFloat($('fade-time').value) * 1000);
-  fadeFirstMs = Math.max(0, parseFloat($('fade-first').value) * 1000);
-  fadeLastMs = Math.max(0, parseFloat($('fade-last').value) * 1000);
+  startLag = Math.max(0, parseFloat($('start-lag').value));
   lagOffset = parseFloat($('lag-offset').value);
   autoInterval = $('auto-interval').checked;
   // If auto-interval is on, compute and override intervalSec
   autoEndAfterMusic = false;
   if (autoInterval && audioFiles.length > 0 && splatFiles.length > 0 && totalMusicDuration > 0) {
     const fadeT = fadeTimeMs / 1000;
-    const perSlide = totalMusicDuration / splatFiles.length;
+    const effectiveDuration = totalMusicDuration - startLag;
+    const perSlide = effectiveDuration / splatFiles.length;
     const displayTime = perSlide - fadeT * 2 - lagOffset;
     if (displayTime > 0) {
       intervalSec = displayTime;
@@ -952,14 +946,16 @@ async function updateAutoIntervalDisplay() {
   }
   const fadeT = parseFloat($('fade-time').value);
   const lagT = parseFloat($('lag-offset').value);
-  const perSlide = totalMusicDuration / splatFiles.length;
+  const startT = parseFloat($('start-lag').value);
+  const effectiveDuration = totalMusicDuration - startT;
+  const perSlide = effectiveDuration / splatFiles.length;
   const displayTime = perSlide - fadeT * 2 - lagT;
   if (displayTime <= 0) {
-    autoIntervalInfoEl.textContent = `⚠ フェード時間が長すぎます（音楽${totalMusicDuration.toFixed(1)}秒 / ${splatFiles.length}枚 = ${perSlide.toFixed(2)}秒/枚）`;
+    autoIntervalInfoEl.textContent = `⚠ 時間が足りません（音楽${totalMusicDuration.toFixed(1)}秒 - 初期ラグ${startT.toFixed(1)}秒 / ${splatFiles.length}枚）`;
     return;
   }
   autoIntervalInfoEl.innerHTML = `✓ 自動計算: <b style="color:var(--fg)">${displayTime.toFixed(2)}秒/枚</b><br>` +
-    `<span style="color:var(--dim);font-size:12px">音楽 ${totalMusicDuration.toFixed(1)}秒 ÷ ${splatFiles.length}枚 − フェード ${fadeT.toFixed(1)}秒 × 2 − ラグ ${lagT.toFixed(2)}秒</span>`;
+    `<span style="color:var(--dim);font-size:12px">(音楽 ${totalMusicDuration.toFixed(1)}秒 − 初期ラグ ${startT.toFixed(1)}秒) ÷ ${splatFiles.length}枚 − フェード ${fadeT.toFixed(1)}秒 × 2 − ラグ ${lagT.toFixed(2)}秒</span>`;
 }
 
 // ── JSON config ────────────────────────────────────────
@@ -983,6 +979,9 @@ function applyConfigFromJson(cfg) {
   if (cfg.interval !== undefined) intervalEl.value = cfg.interval;
   if (cfg.fadeTime !== undefined) {
     const el = $('fade-time'); if (el) { el.value = cfg.fadeTime; el.dispatchEvent(new Event('input')); }
+  }
+  if (cfg.startLag !== undefined) {
+    const el = $('start-lag'); if (el) { el.value = cfg.startLag; el.dispatchEvent(new Event('input')); }
   }
   if (cfg.lagOffset !== undefined) {
     const el = $('lag-offset'); if (el) { el.value = cfg.lagOffset; el.dispatchEvent(new Event('input')); }
@@ -1755,13 +1754,11 @@ async function showSlide(index) {
   if (isLoading) return;
   isLoading = true; loadingEl.classList.add('show');
   const isFirst = currentIndex === -1;
-  const targetIndex = ((index % splatFiles.length) + splatFiles.length) % splatFiles.length;
-  const isLast = targetIndex === splatFiles.length - 1;
   if (isFirst) {
     slideCount = 0;
     fadeOpacity = 1; applyFadeOpacity();
     await loadSlideData(index);
-    await fadeTo(0, fadeFirstMs);
+    await fadeTo(0, fadeTimeMs);
   } else {
     await fadeTo(1, fadeTimeMs);
     slideCount++;
@@ -1846,6 +1843,12 @@ async function enterVRSetup() {
 async function startSlideshowVR() {
   isRunning = true; isPaused = false;
   startAudio();
+  // If auto-interval is on, wait startLag seconds before showing first slide
+  // This compensates for the lag between music start and slide appearance
+  if (autoInterval && startLag > 0) {
+    await new Promise(resolve => setTimeout(resolve, startLag * 1000));
+  }
+  if (!isRunning) return; // user may have ended/restarted during the wait
   await showSlide(0);
   scheduleNext();
 }
@@ -1869,7 +1872,7 @@ function scheduleNext() {
     const isLast = currentIndex === splatFiles.length - 1;
     if (isLast && (autoEndAfterMusic || !repeatModel)) {
       showToast(`END sequence: showEnd=${showEnd} isLast=${isLast}`, 'info');
-      await fadeTo(1, fadeLastMs);
+      await fadeTo(1, fadeTimeMs);
       disposeCurrentSplat();
       if (showEnd) {
         createEndText();
@@ -1909,6 +1912,7 @@ async function restartSlideshow() {
   isPaused = false;
   isRunning = false;
   isLoading = false;
+  loadingEl.classList.remove('show');
   onFadeComplete = null;
   // Fully stop audio
   if (audioSource) {
@@ -1936,7 +1940,8 @@ async function restartSlideshow() {
 }
 
 function endSlideshow() {
-  isRunning = false; isPaused = false;
+  isRunning = false; isPaused = false; isLoading = false;
+  loadingEl.classList.remove('show');
   clearTimeout(timer); cancelAnimationFrame(progressRAF);
   onFadeComplete = null; fadeOpacity = 0; fadeTarget = 0; applyFadeOpacity();
   // Fully stop audio and close context
@@ -1991,6 +1996,7 @@ $('download-config-btn').addEventListener('click', () => {
   const cfg = {
     interval: parseFloat($('interval').value),
     fadeTime: parseFloat($('fade-time').value),
+    startLag: parseFloat($('start-lag').value),
     lagOffset: parseFloat($('lag-offset').value),
     autoInterval: $('auto-interval').checked,
     basePos: {
