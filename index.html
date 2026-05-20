@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v3.8</span>
+      <span class="version">v3.9</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -1510,6 +1510,8 @@ function setupXR() {
   app.xr.on('start', () => {
     inVR = true; hudEl.classList.add('hidden');
     prevButtonStates = {}; bButtonHeldSince = null; yButtonHeldSince = null;
+    // Start in black so first slide can fade in without a pop
+    fadeOpacity = 1; fadeTarget = 1; applyFadeOpacity();
   });
   app.xr.on('end', () => {
     inVR = false;
@@ -1756,7 +1758,7 @@ async function showSlide(index) {
   const isFirst = currentIndex === -1;
   if (isFirst) {
     slideCount = 0;
-    fadeOpacity = 1; applyFadeOpacity();
+    // fadeOpacity is already 1 (set on VR start) so no flash to black
     await loadSlideData(index);
     await fadeTo(0, fadeTimeMs);
   } else {
@@ -1932,7 +1934,7 @@ async function restartSlideshow() {
   currentIndex = -1;
   animProgress = 0;
   slideCount = 0;
-  fadeOpacity = 1; applyFadeOpacity();
+  fadeOpacity = 1; fadeTarget = 1; applyFadeOpacity();
   progressBarEl.style.width = '0%';
   pauseBtn.textContent = '⏸ PAUSE';
   // Restart from beginning
