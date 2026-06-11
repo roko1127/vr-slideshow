@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v4.1</span>
+      <span class="version">v4.2</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -1204,6 +1204,7 @@ function createBgSphere() {
     bgSphere = new Entity('bg-ambient-sphere');
     bgSphere.addComponent('render', { type: 'sphere', material: bgSphereMat });
     bgSphere.setLocalScale(80, 80, 80);
+    bgSphere.setLocalEulerAngles(0, 180, 0); // pairs with the half-turn in bgDirToTexel
     bgSphere.setPosition(0, 1.0, 0);
     bgSphere.enabled = false;
     app.root.addChild(bgSphere);
@@ -1343,7 +1344,11 @@ function bgDirToTexel(dx, dy, dz) {
   if (len < 1e-5) return null;
   const yaw = Math.atan2(dx, -dz);
   const pitch = Math.asin(Math.max(-1, Math.min(1, dy / len)));
-  let u = Math.floor((yaw / (2 * Math.PI) + 0.5) * BG_EQ_W);
+  // Measured from PlayCanvas SphereGeometry UVs: u=0 faces -Z and u
+  // increases clockwise (yaw negative), v=0 is +Y (top).
+  // We add a half-turn here and rotate the sphere 180deg to match, so the
+  // texture seam (u=0) ends up behind the viewer instead of on the content.
+  let u = Math.floor((0.5 - yaw / (2 * Math.PI)) * BG_EQ_W);
   let v = Math.floor((0.5 - pitch / Math.PI) * BG_EQ_H);
   u = ((u % BG_EQ_W) + BG_EQ_W) % BG_EQ_W;
   v = Math.max(0, Math.min(BG_EQ_H - 1, v));
@@ -1388,7 +1393,7 @@ function bgBuildTextureFromImage(img) {
       const p = (sy * SW + sx) * 4;
       const yaw = cYaw + (sx / (SW - 1) - 0.5) * spanYaw;
       const pitch = cPitch - (sy / (SH2 - 1) - 0.5) * spanPitch; // image top = up
-      let u = Math.floor((yaw / (2 * Math.PI) + 0.5) * BG_EQ_W);
+      let u = Math.floor((0.5 - yaw / (2 * Math.PI)) * BG_EQ_W);
       let v = Math.floor((0.5 - pitch / Math.PI) * BG_EQ_H);
       u = ((u % BG_EQ_W) + BG_EQ_W) % BG_EQ_W;
       v = Math.max(0, Math.min(BG_EQ_H - 1, v));
@@ -1841,7 +1846,6 @@ function initApp() {
     updateHands();
     updateControllerButtons(dt);
     updateEndFade(dt);
-    if (bgSphere && bgSphere.enabled) bgSphere.rotate(0, dt * 0.3, 0);
     // Debug display
     const dr = document.getElementById('debug-repeat');
     const da = document.getElementById('debug-audio');
