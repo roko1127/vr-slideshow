@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v4.0</span>
+      <span class="version">v4.1</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -342,10 +342,16 @@
             <input type="range" id="bg-soft" min="0" max="3" step="1" value="2">
             <span class="s-val" id="vbg-soft">2</span>
           </div>
+          <div class="s-row">
+            <span class="s-key">減光</span>
+            <input type="range" id="bg-falloff" min="0" max="0.8" step="0.05" value="0">
+            <span class="s-val" id="vbg-falloff">0.00</span>
+          </div>
         </div>
         <p style="font-size:14px;color:var(--dim);margin-top:8px;line-height:1.6">
-          PLY/SOGのデータから色と位置を直接読み取り、全天球に投影します。<br>
-          空の色は上に、地面の色は下に広がります（描画負荷ほぼゼロ）
+          PLY/SOGのデータから色と位置を直接読み取り、輪郭の色を<br>
+          中心から放射状に引き伸ばして全天球に投影します（描画負荷ほぼゼロ）<br>
+          減光: 輪郭から離れるほど暗くする（0=OFF）
         </p>
       </div>
     </div>
@@ -499,7 +505,7 @@ import {
   Application, Asset, Entity, Color, Vec3,
   FILLMODE_FILL_WINDOW, RESOLUTION_AUTO,
   StandardMaterial, Texture, PIXELFORMAT_RGBA8,
-  ADDRESS_CLAMP_TO_EDGE, FILTER_LINEAR
+  ADDRESS_CLAMP_TO_EDGE, ADDRESS_REPEAT, FILTER_LINEAR
 } from 'playcanvas';
 
 const BLEND_NORMAL = 2, CULLFACE_NONE = 0;
@@ -549,10 +555,11 @@ let handColorHex = '#000000';
 let bgAmbientEnabled = true;
 let bgAmbientStrength = 0.5;
 let bgAmbientSoft = 2;
+let bgAmbientFalloff = 0;
 let bgSphere = null, bgSphereMat = null, bgTexture = null;
 let bgHasTexture = false;
 let bgGenSession = 0;
-const BG_EQ_W = 128, BG_EQ_H = 64;
+const BG_EQ_W = 256, BG_EQ_H = 128;
 const BG_VIEWPOINT = { x: 0, y: 1.6, z: 0 };
 
 // Particles
@@ -621,7 +628,7 @@ function hexToRgb01(hex) {
 
 // ── Settings UI ────────────────────────────────────────
 function attachStepButtons() {
-  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time','start-lag','lag-offset','end-ox','end-oy','end-oz','bg-strength','bg-soft'];
+  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time','start-lag','lag-offset','end-ox','end-oy','end-oz','bg-strength','bg-soft','bg-falloff'];
   sliderIds.forEach(id => {
     const slider = $(id);
     if (!slider) return;
@@ -720,6 +727,9 @@ function initUI() {
   bindSlider('bg-soft','vbg-soft', v=>String(Math.round(v)), v=>{
     bgAmbientSoft = Math.round(v);
   });
+  bindSlider('bg-falloff','vbg-falloff', v=>v.toFixed(2), v=>{
+    bgAmbientFalloff = v;
+  });
 
   $('show-end').addEventListener('change', e => {
     showEnd = e.target.checked;
@@ -795,6 +805,7 @@ function readCfg() {
   bgAmbientEnabled = $('bg-ambient').checked;
   bgAmbientStrength = parseFloat($('bg-strength').value);
   bgAmbientSoft = Math.round(parseFloat($('bg-soft').value));
+  bgAmbientFalloff = parseFloat($('bg-falloff').value);
 }
 
 // ── Splat transform ────────────────────────────────────
@@ -1050,6 +1061,7 @@ function applyConfigFromJson(cfg) {
     setCheckbox('bg-ambient',cfg.bgAmbient.enabled);
     setSliderVal('bg-strength',cfg.bgAmbient.strength);
     setSliderVal('bg-soft',cfg.bgAmbient.soft);
+    setSliderVal('bg-falloff',cfg.bgAmbient.falloff);
   }
   if (cfg.particles) {
     setCheckbox('particles-enabled',cfg.particles.enabled);
@@ -1176,7 +1188,7 @@ function createBgSphere() {
       width: BG_EQ_W, height: BG_EQ_H,
       format: PIXELFORMAT_RGBA8,
       mipmaps: false,
-      addressU: ADDRESS_CLAMP_TO_EDGE,
+      addressU: ADDRESS_REPEAT,
       addressV: ADDRESS_CLAMP_TO_EDGE,
       minFilter: FILTER_LINEAR,
       magFilter: FILTER_LINEAR
@@ -1332,7 +1344,7 @@ function bgDirToTexel(dx, dy, dz) {
   const yaw = Math.atan2(dx, -dz);
   const pitch = Math.asin(Math.max(-1, Math.min(1, dy / len)));
   let u = Math.floor((yaw / (2 * Math.PI) + 0.5) * BG_EQ_W);
-  let v = Math.floor((0.5 + pitch / Math.PI) * BG_EQ_H);
+  let v = Math.floor((0.5 - pitch / Math.PI) * BG_EQ_H);
   u = ((u % BG_EQ_W) + BG_EQ_W) % BG_EQ_W;
   v = Math.max(0, Math.min(BG_EQ_H - 1, v));
   return v * BG_EQ_W + u;
@@ -1377,7 +1389,7 @@ function bgBuildTextureFromImage(img) {
       const yaw = cYaw + (sx / (SW - 1) - 0.5) * spanYaw;
       const pitch = cPitch - (sy / (SH2 - 1) - 0.5) * spanPitch; // image top = up
       let u = Math.floor((yaw / (2 * Math.PI) + 0.5) * BG_EQ_W);
-      let v = Math.floor((0.5 + pitch / Math.PI) * BG_EQ_H);
+      let v = Math.floor((0.5 - pitch / Math.PI) * BG_EQ_H);
       u = ((u % BG_EQ_W) + BG_EQ_W) % BG_EQ_W;
       v = Math.max(0, Math.min(BG_EQ_H - 1, v));
       const idx = v * BG_EQ_W + u;
@@ -1388,7 +1400,7 @@ function bgBuildTextureFromImage(img) {
 }
 
 function bgFinishTexture(sr, sg, sb, cnt) {
-  const N = BG_EQ_W * BG_EQ_H;
+  const W = BG_EQ_W, H = BG_EQ_H, N = W * H;
   const r = new Float32Array(N), g = new Float32Array(N), b = new Float32Array(N);
   const filled = new Uint8Array(N);
   let filledCount = 0;
@@ -1399,57 +1411,149 @@ function bgFinishTexture(sr, sg, sb, cnt) {
     }
   }
   if (!filledCount) return false;
-  // Dilation: stretch edge colors outward until the sphere is fully covered
-  let guard = 0;
-  while (filledCount < N && guard++ < 200) {
-    const nf = filled.slice();
-    for (let v = 0; v < BG_EQ_H; v++) {
-      for (let u = 0; u < BG_EQ_W; u++) {
-        const i = v * BG_EQ_W + u;
-        if (filled[i]) continue;
-        let ar = 0, ag = 0, ab = 0, n = 0;
-        const L = v * BG_EQ_W + ((u - 1 + BG_EQ_W) % BG_EQ_W);
-        const R = v * BG_EQ_W + ((u + 1) % BG_EQ_W);
-        if (filled[L]) { ar += r[L]; ag += g[L]; ab += b[L]; n++; }
-        if (filled[R]) { ar += r[R]; ag += g[R]; ab += b[R]; n++; }
-        if (v > 0) { const U = i - BG_EQ_W; if (filled[U]) { ar += r[U]; ag += g[U]; ab += b[U]; n++; } }
-        if (v < BG_EQ_H - 1) { const D = i + BG_EQ_W; if (filled[D]) { ar += r[D]; ag += g[D]; ab += b[D]; n++; } }
-        if (n) { r[i] = ar / n; g[i] = ag / n; b[i] = ab / n; nf[i] = 1; filledCount++; }
-      }
+
+  // Content centroid (circular mean on u because longitude wraps)
+  let su = 0, cu = 0, sv = 0, fr = 0, fg = 0, fb = 0;
+  for (let v = 0; v < H; v++) {
+    for (let u = 0; u < W; u++) {
+      const i = v * W + u;
+      if (!filled[i]) continue;
+      const a = (u / W) * 2 * Math.PI;
+      su += Math.sin(a); cu += Math.cos(a); sv += v;
+      fr += r[i]; fg += g[i]; fb += b[i];
     }
-    filled.set(nf);
   }
-  // Box blur passes (にじみ): radius 1, count scales with the slider
-  const passes = 2 + bgAmbientSoft * 2;
-  let cr = r, cg = g, cb2 = b;
-  for (let p = 0; p < passes; p++) {
+  let centU = (Math.atan2(su, cu) / (2 * Math.PI)) * W;
+  centU = ((centU % W) + W) % W;
+  const centV = sv / filledCount;
+  const avgR = fr / filledCount, avgG = fg / filledCount, avgB = fb / filledCount;
+
+  // Radial stretch: each empty texel takes the color of the content
+  // silhouette point lying in its own direction (march toward centroid).
+  // Adjacent texels sample adjacent silhouette points, so the extended
+  // background stays continuous — no collision fronts between colors.
+  const dist = new Float32Array(N); // 0 inside content
+  const maxSteps = W;
+  for (let v = 0; v < H; v++) {
+    for (let u = 0; u < W; u++) {
+      const i = v * W + u;
+      if (filled[i]) continue;
+      let du = centU - u;
+      if (du > W / 2) du -= W; else if (du < -W / 2) du += W; // wrap-aware shortest path
+      const dv2 = centV - v;
+      const len = Math.sqrt(du * du + dv2 * dv2);
+      if (len < 0.5) { r[i] = avgR; g[i] = avgG; b[i] = avgB; dist[i] = 1; continue; }
+      const stepU = du / len, stepV = dv2 / len;
+      let hit = -1;
+      let fu = u + 0.5, fv = v + 0.5;
+      for (let t = 1; t <= maxSteps; t++) {
+        fu += stepU; fv += stepV;
+        const iu = ((Math.floor(fu) % W) + W) % W;
+        const iv = Math.max(0, Math.min(H - 1, Math.floor(fv)));
+        const j = iv * W + iu;
+        if (filled[j]) { hit = j; dist[i] = t; break; }
+      }
+      if (hit >= 0) { r[i] = r[hit]; g[i] = g[hit]; b[i] = b[hit]; }
+      else { r[i] = avgR; g[i] = avgG; b[i] = avgB; dist[i] = maxSteps; }
+    }
+  }
+
+  // Progressive blur: a lightly blurred and a heavily blurred version,
+  // blended by distance from the content silhouette. Near the content the
+  // extension stays anchored and detailed; far away it melts smoothly.
+  const blurPass = (cr2, cg2, cb3) => {
     const nr = new Float32Array(N), ng = new Float32Array(N), nb = new Float32Array(N);
-    for (let v = 0; v < BG_EQ_H; v++) {
-      for (let u = 0; u < BG_EQ_W; u++) {
+    for (let v = 0; v < H; v++) {
+      for (let u = 0; u < W; u++) {
         let ar = 0, ag = 0, ab = 0, n = 0;
-        for (let dv2 = -1; dv2 <= 1; dv2++) {
-          const vv = v + dv2;
-          if (vv < 0 || vv >= BG_EQ_H) continue;
-          for (let du = -1; du <= 1; du++) {
-            const uu = ((u + du) % BG_EQ_W + BG_EQ_W) % BG_EQ_W;
-            const j = vv * BG_EQ_W + uu;
-            ar += cr[j]; ag += cg[j]; ab += cb2[j]; n++;
+        for (let dv3 = -1; dv3 <= 1; dv3++) {
+          const vv = v + dv3;
+          if (vv < 0 || vv >= H) continue;
+          for (let du2 = -1; du2 <= 1; du2++) {
+            const uu = ((u + du2) % W + W) % W;
+            const j = vv * W + uu;
+            ar += cr2[j]; ag += cg2[j]; ab += cb3[j]; n++;
           }
         }
-        const i = v * BG_EQ_W + u;
+        const i = v * W + u;
         nr[i] = ar / n; ng[i] = ag / n; nb[i] = ab / n;
       }
     }
-    cr = nr; cg = ng; cb2 = nb;
+    return [nr, ng, nb];
+  };
+  const lightPasses = 2;
+  let lr = r, lg = g, lb = b;
+  for (let p = 0; p < lightPasses; p++) [lr, lg, lb] = blurPass(lr, lg, lb);
+  // Heavy blur = downsample 1/4 -> blur -> bilinear upsample.
+  // Far regions melt into one smooth gradient (no residual streak edges)
+  // and it's far cheaper than dozens of full-res passes.
+  const DS = 4, LW = W / DS, LH = H / DS, LN = LW * LH;
+  let dr = new Float32Array(LN), dg = new Float32Array(LN), db = new Float32Array(LN);
+  for (let lv = 0; lv < LH; lv++) {
+    for (let lu = 0; lu < LW; lu++) {
+      let ar = 0, ag = 0, ab = 0;
+      for (let sv2 = 0; sv2 < DS; sv2++) {
+        for (let su2 = 0; su2 < DS; su2++) {
+          const j = (lv * DS + sv2) * W + (lu * DS + su2);
+          ar += lr[j]; ag += lg[j]; ab += lb[j];
+        }
+      }
+      const li = lv * LW + lu;
+      dr[li] = ar / (DS * DS); dg[li] = ag / (DS * DS); db[li] = ab / (DS * DS);
+    }
   }
+  const lowBlur = (cr2, cg2, cb3) => {
+    const nr = new Float32Array(LN), ng = new Float32Array(LN), nb = new Float32Array(LN);
+    for (let v2 = 0; v2 < LH; v2++) {
+      for (let u2 = 0; u2 < LW; u2++) {
+        let ar = 0, ag = 0, ab = 0, n = 0;
+        for (let dv3 = -1; dv3 <= 1; dv3++) {
+          const vv = v2 + dv3;
+          if (vv < 0 || vv >= LH) continue;
+          for (let du2 = -1; du2 <= 1; du2++) {
+            const uu = ((u2 + du2) % LW + LW) % LW;
+            ar += cr2[vv * LW + uu]; ag += cg2[vv * LW + uu]; ab += cb3[vv * LW + uu]; n++;
+          }
+        }
+        const i2 = v2 * LW + u2;
+        nr[i2] = ar / n; ng[i2] = ag / n; nb[i2] = ab / n;
+      }
+    }
+    return [nr, ng, nb];
+  };
+  const lowPasses = 2 + bgAmbientSoft * 2; // soft 0..3 -> 2..8
+  for (let p = 0; p < lowPasses; p++) [dr, dg, db] = lowBlur(dr, dg, db);
+  // bilinear upsample (u wraps, v clamps)
+  const hr = new Float32Array(N), hg = new Float32Array(N), hb = new Float32Array(N);
+  for (let v2 = 0; v2 < H; v2++) {
+    const fv = Math.max(0, Math.min(LH - 1.001, (v2 + 0.5) / DS - 0.5));
+    const v0 = Math.floor(fv), tv = fv - v0, v1 = Math.min(LH - 1, v0 + 1);
+    for (let u2 = 0; u2 < W; u2++) {
+      const fu = (u2 + 0.5) / DS - 0.5;
+      const u0 = ((Math.floor(fu) % LW) + LW) % LW, tu = fu - Math.floor(fu);
+      const u1 = (u0 + 1) % LW;
+      const i00 = v0 * LW + u0, i10 = v0 * LW + u1, i01 = v1 * LW + u0, i11 = v1 * LW + u1;
+      const w00 = (1 - tu) * (1 - tv), w10 = tu * (1 - tv), w01 = (1 - tu) * tv, w11 = tu * tv;
+      const i2 = v2 * W + u2;
+      hr[i2] = dr[i00] * w00 + dr[i10] * w10 + dr[i01] * w01 + dr[i11] * w11;
+      hg[i2] = dg[i00] * w00 + dg[i10] * w10 + dg[i01] * w01 + dg[i11] * w11;
+      hb[i2] = db[i00] * w00 + db[i10] * w10 + db[i01] * w01 + db[i11] * w11;
+    }
+  }
+
+  const DBLEND = W * 0.12; // blend reaches full heavy blur ~30px out
+  const DFAR = W * 0.3;    // falloff distance scale
+  const smooth = t => { const x = Math.max(0, Math.min(1, t)); return x * x * (3 - 2 * x); };
   const canvas = document.createElement('canvas');
-  canvas.width = BG_EQ_W; canvas.height = BG_EQ_H;
+  canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
-  const imgData = ctx.createImageData(BG_EQ_W, BG_EQ_H);
+  const imgData = ctx.createImageData(W, H);
   for (let i = 0; i < N; i++) {
-    imgData.data[i * 4] = Math.round(clamp01(cr[i]) * 255);
-    imgData.data[i * 4 + 1] = Math.round(clamp01(cg[i]) * 255);
-    imgData.data[i * 4 + 2] = Math.round(clamp01(cb2[i]) * 255);
+    const w = smooth(dist[i] / DBLEND);
+    const dim = 1 - bgAmbientFalloff * smooth(dist[i] / DFAR);
+    imgData.data[i * 4]     = Math.round(clamp01((lr[i] * (1 - w) + hr[i] * w) * dim) * 255);
+    imgData.data[i * 4 + 1] = Math.round(clamp01((lg[i] * (1 - w) + hg[i] * w) * dim) * 255);
+    imgData.data[i * 4 + 2] = Math.round(clamp01((lb[i] * (1 - w) + hb[i] * w) * dim) * 255);
     imgData.data[i * 4 + 3] = 255;
   }
   ctx.putImageData(imgData, 0, 0);
@@ -2418,7 +2522,8 @@ $('download-config-btn').addEventListener('click', () => {
     bgAmbient: {
       enabled: $('bg-ambient').checked,
       strength: parseFloat($('bg-strength').value),
-      soft: Math.round(parseFloat($('bg-soft').value))
+      soft: Math.round(parseFloat($('bg-soft').value)),
+      falloff: parseFloat($('bg-falloff').value)
     },
     particles: {
       enabled: $('particles-enabled').checked,
