@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v4.2</span>
+      <span class="version">v4.3</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -423,6 +423,7 @@
       </div>
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
         <label class="check-label"><input type="checkbox" id="show-end" checked> END表示</label>
+        <label class="check-label"><input type="checkbox" id="memory-lane" checked> 走馬灯</label>
       </div>
       <div class="settings-grid" id="end-settings">
         <div class="s-row">
@@ -449,7 +450,8 @@
       <p style="font-size:14px;color:var(--dim);margin-top:10px;line-height:1.6">
         3DモデルOFF: 最後のスライド後に暗転停止<br>
         音楽OFF: 最後の曲が終わったら停止<br>
-        END表示: リピートOFF時に最後に「END」を表示
+        END表示: リピートOFF時に最後に「END」を表示<br>
+        走馬灯: 最後に全スライドが光のパネルになって周囲に浮かぶ
       </p>
     </div>
 
@@ -464,7 +466,8 @@
       ✦ トリガーを押すとスライドショー開始<br>
       ✦ 再生中はトリガーで次のスライドへ<br>
       ✦ ハンドトラッキング中は操作無効<br>
-      ✦ <b>没入背景</b>: 標準PLY / SOG / 画像から自動生成（compressed PLYは非対応）
+      ✦ <b>没入背景</b>: 標準PLY / SOG / 画像から自動生成（compressed PLYは非対応）<br>
+      ✦ <b>走馬灯</b>: 最後に全スライドの光が周囲を囲む（リピートOFF時）
     </div>
   </div>
 </div>
@@ -561,6 +564,13 @@ let bgHasTexture = false;
 let bgGenSession = 0;
 const BG_EQ_W = 256, BG_EQ_H = 128;
 const BG_VIEWPOINT = { x: 0, y: 1.6, z: 0 };
+
+// Memory lane (v4.3: all slides surround the viewer at the end)
+let memoryLaneEnabled = true;
+let memoryThumbs = [];          // per-slide-index thumbnail canvases (CPU)
+let memoryGroup = null, memoryPanels = [];
+let memoryActive = false, memoryStartAt = 0;
+const MEMORY_THUMB_S = 128, MEMORY_RADIUS = 3.2, MEMORY_MAX_PANELS = 48;
 
 // Particles
 let particles = [];
@@ -731,6 +741,10 @@ function initUI() {
     bgAmbientFalloff = v;
   });
 
+  $('memory-lane').addEventListener('change', e => {
+    memoryLaneEnabled = e.target.checked;
+  });
+
   $('show-end').addEventListener('change', e => {
     showEnd = e.target.checked;
     const s = $('end-settings');
@@ -806,6 +820,7 @@ function readCfg() {
   bgAmbientStrength = parseFloat($('bg-strength').value);
   bgAmbientSoft = Math.round(parseFloat($('bg-soft').value));
   bgAmbientFalloff = parseFloat($('bg-falloff').value);
+  memoryLaneEnabled = $('memory-lane').checked;
 }
 
 // ── Splat transform ────────────────────────────────────
@@ -1079,6 +1094,7 @@ function applyConfigFromJson(cfg) {
     setCheckbox('repeat-model',cfg.repeat.model);
     setCheckbox('repeat-music',cfg.repeat.music);
     setCheckbox('show-end',cfg.repeat.showEnd);
+    setCheckbox('memory-lane',cfg.repeat.memoryLane);
     if (cfg.repeat.endColor) setColorVal('end-color','vend-color',cfg.repeat.endColor);
     setSliderVal('end-ox',cfg.repeat.endOffsetX);
     setSliderVal('end-oy',cfg.repeat.endOffsetY);
@@ -1569,23 +1585,193 @@ function bgFinishTexture(sr, sg, sb, cnt) {
   return true;
 }
 
+// ── Memory lane (v4.3) ─────────────────────────────────
+// While each slide loads we already extract position+color samples for the
+// ambient background. The same samples, projected front-on into a small
+// canvas, make an impressionistic glowing thumbnail of the slide — cached
+// per slide on the CPU. At the END sequence every thumbnail becomes a
+// floating panel arranged in a ring around the viewer.
+
+function memoryThumbFromSamples(samples) {
+  const S = MEMORY_THUMB_S, N = S * S;
+  const xs = samples.map(p => p.x).sort((a, b) => a - b);
+  const ys = samples.map(p => -p.y).sort((a, b) => a - b); // up = -y (entity rotX 180)
+  const pct = (arr, q) => arr[Math.floor(q * (arr.length - 1))];
+  const x0 = pct(xs, 0.03), x1 = pct(xs, 0.97), y0 = pct(ys, 0.03), y1 = pct(ys, 0.97);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const half = Math.max(x1 - x0, y1 - y0) / 2 * 1.08 || 1;
+  const sr = new Float32Array(N), sg = new Float32Array(N), sb = new Float32Array(N), cnt = new Float32Array(N);
+  for (const p of samples) {
+    const u = Math.floor(((p.x - cx) / half * 0.5 + 0.5) * S);
+    const v = Math.floor((0.5 - (-p.y - cy) / half * 0.5) * S); // row 0 = top
+    if (u < 0 || u >= S || v < 0 || v >= S) continue;
+    const i = v * S + u;
+    sr[i] += p.r; sg[i] += p.g; sb[i] += p.b; cnt[i]++;
+  }
+  const r = new Float32Array(N), g = new Float32Array(N), b = new Float32Array(N), a = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    if (cnt[i] > 0) { r[i] = sr[i] / cnt[i]; g[i] = sg[i] / cnt[i]; b[i] = sb[i] / cnt[i]; a[i] = 1; }
+  }
+  // Fill interior pinholes only (needs 2+ filled neighbors) so the
+  // silhouette edge stays crisp and the padding stays transparent
+  for (let pass = 0; pass < 2; pass++) {
+    const na = a.slice(), nr = r.slice(), ng = g.slice(), nb = b.slice();
+    for (let v = 0; v < S; v++) {
+      for (let u = 0; u < S; u++) {
+        const i = v * S + u;
+        if (a[i] > 0) continue;
+        let ar = 0, ag = 0, ab = 0, n = 0;
+        if (u > 0 && a[i - 1] > 0) { ar += r[i - 1]; ag += g[i - 1]; ab += b[i - 1]; n++; }
+        if (u < S - 1 && a[i + 1] > 0) { ar += r[i + 1]; ag += g[i + 1]; ab += b[i + 1]; n++; }
+        if (v > 0 && a[i - S] > 0) { ar += r[i - S]; ag += g[i - S]; ab += b[i - S]; n++; }
+        if (v < S - 1 && a[i + S] > 0) { ar += r[i + S]; ag += g[i + S]; ab += b[i + S]; n++; }
+        if (n >= 2) { nr[i] = ar / n; ng[i] = ag / n; nb[i] = ab / n; na[i] = 1; }
+      }
+    }
+    a.set(na); r.set(nr); g.set(ng); b.set(nb);
+  }
+  // Write rows flipped vertically (END-text recipe: plane shows the canvas
+  // upside down, so we pre-flip)
+  const canvas = document.createElement('canvas');
+  canvas.width = S; canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(S, S);
+  for (let v = 0; v < S; v++) {
+    const src = v * S, dst = (S - 1 - v) * S;
+    for (let u = 0; u < S; u++) {
+      const i = src + u, o = (dst + u) * 4;
+      imgData.data[o] = Math.round(clamp01(r[i]) * 255);
+      imgData.data[o + 1] = Math.round(clamp01(g[i]) * 255);
+      imgData.data[o + 2] = Math.round(clamp01(b[i]) * 255);
+      imgData.data[o + 3] = a[i] > 0 ? 235 : 0;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return canvas;
+}
+
+function memoryThumbFromImage(img) {
+  const S = MEMORY_THUMB_S;
+  const canvas = document.createElement('canvas');
+  canvas.width = S; canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  // fit inside, transparent letterbox, vertical flip (END-text recipe)
+  const scale = Math.min(S / img.width, S / img.height);
+  const dw = img.width * scale, dh = img.height * scale;
+  ctx.translate(0, S);
+  ctx.scale(1, -1);
+  ctx.drawImage(img, (S - dw) / 2, (S - dh) / 2, dw, dh);
+  return canvas;
+}
+
+function createMemoryLane() {
+  if (!app || memoryGroup) return;
+  const entries = [];
+  for (let i = 0; i < splatFiles.length; i++) {
+    if (memoryThumbs[i]) entries.push(memoryThumbs[i]);
+  }
+  if (!entries.length) return;
+  let chosen = entries;
+  if (entries.length > MEMORY_MAX_PANELS) {
+    chosen = [];
+    for (let k = 0; k < MEMORY_MAX_PANELS; k++) chosen.push(entries[Math.floor(k * entries.length / MEMORY_MAX_PANELS)]);
+  }
+  memoryGroup = new Entity('memory-lane');
+  app.root.addChild(memoryGroup);
+  const n = chosen.length;
+  const twoRows = n > 14;
+  const step = 360 / (twoRows ? Math.ceil(n / 2) : n);
+  chosen.forEach((canvas, k) => {
+    try {
+      const tex = new Texture(app.graphicsDevice, {
+        width: canvas.width, height: canvas.height,
+        format: PIXELFORMAT_RGBA8, mipmaps: false,
+        addressU: ADDRESS_CLAMP_TO_EDGE, addressV: ADDRESS_CLAMP_TO_EDGE,
+        minFilter: FILTER_LINEAR, magFilter: FILTER_LINEAR
+      });
+      tex.setSource(canvas);
+      const mat = new StandardMaterial();
+      mat.emissive = new Color(1, 1, 1);
+      mat.emissiveMap = tex;
+      mat.opacityMap = tex; // alpha channel: transparent padding
+      mat.diffuse = new Color(0, 0, 0);
+      mat.useLighting = false;
+      mat.opacity = 0;
+      mat.blendType = BLEND_NORMAL;
+      mat.cull = CULLFACE_NONE;
+      mat.depthWrite = false;
+      mat.update();
+      // Pivot yaw + child panel placed exactly like the END text
+      // (proven orientation: plane euler(-90,0,0) facing the viewer)
+      const row = twoRows ? (k % 2) : 0;
+      const baseY = twoRows ? (row ? 2.0 : 1.2) : 1.55;
+      const yawDeg = (twoRows ? Math.floor(k / 2) : k) * step + (row ? step / 2 : 0);
+      const pivot = new Entity();
+      pivot.setLocalEulerAngles(0, yawDeg, 0);
+      const panel = new Entity();
+      panel.addComponent('render', { type: 'plane', material: mat });
+      panel.setLocalEulerAngles(-90, 0, 0);
+      panel.setLocalPosition(0, baseY, -MEMORY_RADIUS);
+      panel.setLocalScale(0.8, 1, 0.8);
+      pivot.addChild(panel);
+      memoryGroup.addChild(pivot);
+      memoryPanels.push({ mat, panel, tex, baseY, delay: 0.5 + k * 0.18 });
+    } catch(e) { console.warn('memory panel failed:', e); }
+  });
+}
+
+function startMemoryLane() {
+  if (!memoryGroup || !memoryPanels.length) return;
+  memoryActive = true;
+  memoryStartAt = performance.now();
+}
+
+function updateMemoryLane(dt) {
+  if (!memoryActive || !memoryGroup) return;
+  memoryGroup.rotate(0, dt * 0.6, 0); // very slow drift; disposed with the lane
+  const t = (performance.now() - memoryStartAt) / 1000;
+  for (const p of memoryPanels) {
+    const lt = Math.max(0, Math.min(1, (t - p.delay) / 0.9));
+    if (lt <= 0) continue;
+    if (lt >= 1 && p.mat.opacity >= 0.95) continue;
+    const ease = lt * lt * (3 - 2 * lt);
+    p.mat.opacity = ease * 0.95;
+    p.mat.update();
+    p.panel.setLocalPosition(0, p.baseY - (1 - ease) * 0.08, -MEMORY_RADIUS);
+    const sc = 0.8 * (0.92 + 0.08 * ease);
+    p.panel.setLocalScale(sc, 1, sc);
+  }
+}
+
+function disposeMemoryLane() {
+  memoryActive = false;
+  memoryPanels.forEach(p => { try { p.tex.destroy(); } catch(e){} });
+  memoryPanels = [];
+  if (memoryGroup) { try { memoryGroup.destroy(); } catch(e){} }
+  memoryGroup = null;
+}
+
 async function updateAmbientBackground(file) {
   if (!bgSphere || !bgTexture) return;
-  if (!bgAmbientEnabled) { bgSphere.enabled = false; return; }
+  if (!bgAmbientEnabled) bgSphere.enabled = false;
+  if (!bgAmbientEnabled && !memoryLaneEnabled) return;
   bgGenSession++;
   const mySession = bgGenSession;
+  const slideIdx = currentIndex;
   try {
     let ok = false;
-    if (/\.ply$/i.test(file.name)) {
-      const samples = await bgSamplesFromPLY(file);
+    if (/\.ply$/i.test(file.name) || /\.sog$/i.test(file.name)) {
+      const samples = /\.ply$/i.test(file.name)
+        ? await bgSamplesFromPLY(file)
+        : await bgSamplesFromSOG(file);
       if (mySession !== bgGenSession) return;
-      if (samples) { bgBuildTextureFromSamples(samples); ok = bgHasTexture; }
-    } else if (/\.sog$/i.test(file.name)) {
-      const samples = await bgSamplesFromSOG(file);
-      if (mySession !== bgGenSession) return;
-      if (samples) { bgBuildTextureFromSamples(samples); ok = bgHasTexture; }
+      if (samples) {
+        if (bgAmbientEnabled) { bgBuildTextureFromSamples(samples); ok = bgHasTexture; }
+        if (memoryLaneEnabled && !memoryThumbs[slideIdx]) {
+          try { memoryThumbs[slideIdx] = memoryThumbFromSamples(samples); } catch(e) { console.warn('thumb:', e); }
+        }
+      }
     } else if (isImage(file.name)) {
-      // reuse the already-loaded photo texture's source via a fresh Image
       const img = await new Promise((res, rej) => {
         const url = URL.createObjectURL(file);
         const im = new Image();
@@ -1594,12 +1780,16 @@ async function updateAmbientBackground(file) {
         im.src = url;
       });
       if (mySession !== bgGenSession) return;
-      bgBuildTextureFromImage(img);
-      ok = bgHasTexture;
+      if (bgAmbientEnabled) { bgBuildTextureFromImage(img); ok = bgHasTexture; }
+      if (memoryLaneEnabled && !memoryThumbs[slideIdx]) {
+        try { memoryThumbs[slideIdx] = memoryThumbFromImage(img); } catch(e) { console.warn('thumb:', e); }
+      }
     }
-    if (!ok) console.warn('bg: ambient extraction unavailable for', file.name);
-    applyBgAmbientStrength();
-    applyBgAmbientVisibility();
+    if (bgAmbientEnabled) {
+      if (!ok) console.warn('bg: ambient extraction unavailable for', file.name);
+      applyBgAmbientStrength();
+      applyBgAmbientVisibility();
+    }
   } catch(e) {
     console.warn('bg ambient generation failed:', e);
   }
@@ -1846,6 +2036,7 @@ function initApp() {
     updateHands();
     updateControllerButtons(dt);
     updateEndFade(dt);
+    updateMemoryLane(dt);
     // Debug display
     const dr = document.getElementById('debug-repeat');
     const da = document.getElementById('debug-audio');
@@ -2302,6 +2493,7 @@ function autoFrameCamera() {
 async function enterVRSetup() {
   readCfg();
   disposeEndText();
+  disposeMemoryLane();
   if (!app) {
     initApp();
     // Wait for app.xr to be available (XRManager initializes after app.start())
@@ -2344,6 +2536,7 @@ async function enterVRSetup() {
 }
 
 async function startSlideshowVR() {
+  disposeMemoryLane();
   isRunning = true; isPaused = false;
   startAudio();
   // If auto-interval is on, wait startLag seconds before showing first slide
@@ -2377,11 +2570,15 @@ function scheduleNext() {
       showToast(`END sequence: showEnd=${showEnd} isLast=${isLast}`, 'info');
       await fadeTo(1, fadeTimeMs);
       disposeCurrentSplat();
+      if (memoryLaneEnabled) createMemoryLane();
       if (showEnd) {
         createEndText();
         showToast(`createEndText done: entity=${endTextEntity?'YES':'NO'}`, 'info');
+      }
+      if (showEnd || (memoryLaneEnabled && memoryGroup)) {
         await fadeTo(0, fadeTimeMs);
-        showEndText();
+        if (showEnd) showEndText();
+        if (memoryLaneEnabled) startMemoryLane();
       }
       isRunning = false;
       progressBarEl.style.width = '0%';
@@ -2431,6 +2628,7 @@ async function restartSlideshow() {
   // Dispose current splat and END text
   disposeCurrentSplat();
   disposeEndText();
+  disposeMemoryLane();
   // Reset state
   currentIndex = -1;
   animProgress = 0;
@@ -2466,6 +2664,8 @@ function endSlideshow() {
   disposeParticles(); particleMat = null;
   disposeHandModels();
   disposeEndText();
+  disposeMemoryLane();
+  memoryThumbs = [];
   disposeCurrentSplat();
   if (app) {try{app.destroy();}catch(e){} app=null;}
   viewerContainerEl.innerHTML = '';
@@ -2545,6 +2745,7 @@ $('download-config-btn').addEventListener('click', () => {
       model: $('repeat-model').checked,
       music: $('repeat-music').checked,
       showEnd: $('show-end').checked,
+      memoryLane: $('memory-lane').checked,
       endColor: $('end-color').value,
       endOffsetX: parseFloat($('end-ox').value),
       endOffsetY: parseFloat($('end-oy').value),
