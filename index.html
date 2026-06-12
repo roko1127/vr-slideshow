@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v4.7</span>
+      <span class="version">v4.9</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -357,20 +357,20 @@
     </div>
 
     <div class="section">
-      <div class="label">08 ▸ 光の玉・ミスト</div>
+      <div class="label">08 ▸ パーティクル</div>
       <div style="margin-bottom:16px">
-        <label class="check-label"><input type="checkbox" id="particles-enabled" checked> 光の玉（ボケ）を表示</label>
+        <label class="check-label"><input type="checkbox" id="particles-enabled" checked> パーティクルを表示</label>
       </div>
       <div class="settings-grid">
         <div class="s-row">
           <span class="s-key">数</span>
-          <input type="range" id="p-count" min="5" max="100" step="5" value="30">
-          <span class="s-val" id="vp-count">30</span>
+          <input type="range" id="p-count" min="50" max="500" step="10" value="200">
+          <span class="s-val" id="vp-count">200</span>
         </div>
         <div class="s-row">
           <span class="s-key">サイズ</span>
-          <input type="range" id="p-size" min="0.01" max="0.4" step="0.01" value="0.08">
-          <span class="s-val" id="vp-size">0.08</span>
+          <input type="range" id="p-size" min="0.001" max="0.15" step="0.001" value="0.004">
+          <span class="s-val" id="vp-size">0.004</span>
         </div>
         <div class="s-row">
           <span class="s-key">速さ</span>
@@ -384,12 +384,8 @@
         </div>
         <div class="s-row">
           <span class="s-key">透明度</span>
-          <input type="range" id="p-opacity" min="0.05" max="1.0" step="0.05" value="0.45">
-          <span class="s-val" id="vp-opacity">0.45</span>
-        </div>
-        <div class="s-row">
-          <span class="s-key">色の継承</span>
-          <label class="check-label" style="font-size:14px"><input type="checkbox" id="p-inherit" checked> スライドの色を自動で受け継ぐ（OFFで下の色）</label>
+          <input type="range" id="p-opacity" min="0.05" max="1.0" step="0.05" value="0.2">
+          <span class="s-val" id="vp-opacity">0.20</span>
         </div>
         <div class="s-row">
           <span class="s-key">色</span>
@@ -416,20 +412,10 @@
           <span class="s-key">深度テスト</span>
           <label class="check-label" style="font-size:14px"><input type="checkbox" id="p-depth-test"> ONで3Dの後ろに隠れる</label>
         </div>
-      </div>
-      <div style="margin-top:18px">
-        <label class="check-label"><input type="checkbox" id="mist-enabled" checked> グラウンドミスト（足元の霧）</label>
-        <div class="settings-grid" id="mist-settings" style="margin-top:14px">
-          <div class="s-row">
-            <span class="s-key">濃さ</span>
-            <input type="range" id="mist-opacity" min="0" max="0.3" step="0.01" value="0.10">
-            <span class="s-val" id="vmist-opacity">0.10</span>
-          </div>
+        <div class="s-row">
+          <span class="s-key">奥行き連動</span>
+          <label class="check-label" style="font-size:14px"><input type="checkbox" id="p-occlusion" checked> 3DGSの奥に入ると消える（PLY/SOGのみ）</label>
         </div>
-        <p style="font-size:14px;color:var(--dim);margin-top:8px;line-height:1.6">
-          光の玉とミストの色はスライドから自動で受け継がれます。<br>
-          光の玉は3DGSの後ろには出ません（手前と周囲だけに漂います）
-        </p>
       </div>
     </div>
 
@@ -576,34 +562,27 @@ let bgAmbientSoft = 2;
 let bgAmbientFalloff = 0;
 let bgSphere = null, bgSphereMat = null, bgTexture = null;
 let bgHasTexture = false;
+let bgDepthMap = null, bgDepthVP = null; // per-direction min distance to the splat
 let bgGenSession = 0;
 const BG_EQ_W = 256, BG_EQ_H = 128;
 const BG_VIEWPOINT = { x: 0, y: 1.6, z: 0 };
 
 
-// Bokeh lights (formerly particles)
+// Particles
 let particles = [];
-let particleTexture = null;
+let particleMat = null;
 let particlesEnabled = true;
-let particleCount = 30;
-let particleSize = 0.08;
+let particleCount = 200;
+let particleSize = 0.004;
 let particleSpeed = 0.1;
 let particleBright = 1.0;
-let particleOpacity = 0.45;
+let particleOpacity = 0.2;
 let particleColorHex = '#ffffff';
-let particleInherit = true;
 let particleMotion = 'drift';
 let particleVisibility = 'always';
 let particleDepthTest = false;
+let particleOcclusion = true;
 let particleRebuildNeeded = false;
-let particleVisFactor = 1;
-let slidePalette = null;
-let bokehBound = null;
-
-// Ground mist
-let mistEnabled = true;
-let mistOpacity = 0.10;
-let mistLayers = [];
 
 // Hand tracking (Meta official models)
 let leftHandModel = null, rightHandModel = null;
@@ -656,18 +635,17 @@ function hexToRgb01(hex) {
 
 // ── Settings UI ────────────────────────────────────────
 function attachStepButtons() {
-  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time','start-lag','lag-offset','end-ox','end-oy','end-oz','bg-strength','bg-soft','bg-falloff','mist-opacity'];
+  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time','start-lag','lag-offset','end-ox','end-oy','end-oz','bg-strength','bg-soft','bg-falloff'];
   sliderIds.forEach(id => {
     const slider = $(id);
     if (!slider) return;
     const min = parseFloat(slider.min);
     const max = parseFloat(slider.max);
     let stepDelta = 0.05;
-    if (id === 'p-count') stepDelta = 5;
-    else if (id === 'p-size') stepDelta = 0.01;
+    if (id === 'p-count') stepDelta = 10;
+    else if (id === 'p-size') stepDelta = 0.001;
     else if (id === 'fade-time') stepDelta = 0.1;
     else if (id === 'bg-soft') stepDelta = 1;
-    else if (id === 'mist-opacity') stepDelta = 0.01;
     const mk = (label, delta) => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'step-btn'; b.textContent = label;
@@ -709,7 +687,7 @@ function initUI() {
   bindSlider('az-end','vaz-end', v=>v.toFixed(2), v=>{anim.ze=v;});
 
   bindSlider('p-count','vp-count', v=>String(Math.round(v)), v=>{particleCount=Math.round(v); particleRebuildNeeded=true;});
-  bindSlider('p-size','vp-size', v=>v.toFixed(2), v=>{particleSize=v; applyParticleSize();});
+  bindSlider('p-size','vp-size', v=>v.toFixed(3), v=>{particleSize=v; applyParticleSize();});
   bindSlider('p-speed','vp-speed', v=>v.toFixed(2), v=>{particleSpeed=v;});
   bindSlider('p-bright','vp-bright', v=>v.toFixed(2), v=>{particleBright=v; applyParticleAppearance();});
   bindSlider('p-opacity','vp-opacity', v=>v.toFixed(2), v=>{particleOpacity=v; applyParticleAppearance();});
@@ -723,22 +701,14 @@ function initUI() {
   $('p-visibility').addEventListener('change', e => { particleVisibility = e.target.value; });
   $('p-depth-test').addEventListener('change', e => {
     particleDepthTest = e.target.checked;
-    particles.forEach(p => { p.mat.depthTest = particleDepthTest; p.mat.update(); });
+    if (particleMat) { particleMat.depthTest = particleDepthTest; particleMat.update(); }
   });
-  $('p-inherit').addEventListener('change', e => {
-    particleInherit = e.target.checked;
-    applyBokehColors();
-  });
-  $('mist-enabled').addEventListener('change', e => {
-    mistEnabled = e.target.checked;
-    if (mistEnabled && app && !mistLayers.length) buildMist();
-    mistLayers.forEach(l => { l.entity.enabled = mistEnabled; });
-    const ms = $('mist-settings');
-    if (ms) ms.style.opacity = mistEnabled ? '1' : '0.4';
-  });
-  bindSlider('mist-opacity','vmist-opacity', v=>v.toFixed(2), v=>{
-    mistOpacity = v;
-    applyMistTint();
+  $('p-occlusion').addEventListener('change', e => {
+    particleOcclusion = e.target.checked;
+    if (!particleOcclusion) {
+      particles.forEach(p => { p.occl = 0; });
+      applyParticleSize();
+    }
   });
   $('particles-enabled').addEventListener('change', e => {
     particlesEnabled = e.target.checked;
@@ -845,9 +815,7 @@ function readCfg() {
   particleMotion = $('p-motion').value;
   particleVisibility = $('p-visibility').value;
   particleDepthTest = $('p-depth-test').checked;
-  particleInherit = $('p-inherit').checked;
-  mistEnabled = $('mist-enabled').checked;
-  mistOpacity = parseFloat($('mist-opacity').value);
+  particleOcclusion = $('p-occlusion').checked;
   bgColorHex = $('bg-color').value;
   handColorHex = $('hand-color').value;
   bgAmbientEnabled = $('bg-ambient').checked;
@@ -1122,11 +1090,7 @@ function applyConfigFromJson(cfg) {
     setSelect('p-motion',cfg.particles.motion);
     setSelect('p-visibility',cfg.particles.visibility);
     setCheckbox('p-depth-test',cfg.particles.depthTest);
-    setCheckbox('p-inherit',cfg.particles.inherit);
-  }
-  if (cfg.mist) {
-    setCheckbox('mist-enabled',cfg.mist.enabled);
-    setSliderVal('mist-opacity',cfg.mist.opacity);
+    setCheckbox('p-occlusion',cfg.particles.occlusion);
   }
   if (cfg.repeat) {
     setCheckbox('repeat-model',cfg.repeat.model);
@@ -1454,15 +1418,24 @@ function bgBuildTextureFromSamples(samples) {
   // actual position (includes anim start offsets)
   const ent = currentSplatEntity ? currentSplatEntity.getPosition() : basePos;
   const vp = bgGetViewpoint();
+  // Per-direction min distance to the splat surface (for particle occlusion)
+  const depth = new Float32Array(N).fill(Infinity);
   for (const s of samples) {
     const wx = ent.x + s.x;
     const wy = ent.y - s.y;
     const wz = ent.z - s.z;
-    const idx = bgDirToTexel(wx - vp.x, wy - vp.y, wz - vp.z);
+    const dx = wx - vp.x, dy = wy - vp.y, dz = wz - vp.z;
+    const idx = bgDirToTexel(dx, dy, dz);
     if (idx === null) continue;
     const w = s.o !== undefined ? s.o : 1; // opacity = visual contribution
     sr[idx] += s.r * w; sg[idx] += s.g * w; sb[idx] += s.b * w; cnt[idx] += w;
+    if (w >= 0.3) { // faint wisps shouldn't occlude
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist < depth[idx]) depth[idx] = dist;
+    }
   }
+  bgDepthMap = depth;
+  bgDepthVP = { x: vp.x, y: vp.y, z: vp.z };
   bgFinishTexture(sr, sg, sb, cnt);
 }
 
@@ -1667,56 +1640,14 @@ function bgFinishTexture(sr, sg, sb, cnt) {
   return true;
 }
 
-const BLEND_ADDITIVEALPHA = 6; // measured from playcanvas 2.18.1
-
-// ── Slide palette (feeds bokeh lights + mist tint) ─────
-function paletteFromSamples(samples) {
-  const pal = [];
-  for (let t = 0; t < 60 && pal.length < 6; t++) {
-    const p = samples[Math.floor(Math.random() * samples.length)];
-    const lum = p.r * 0.3 + p.g * 0.6 + p.b * 0.1;
-    if (lum < 0.12) continue; // skip near-black picks
-    pal.push({ r: p.r, g: p.g, b: p.b });
-  }
-  if (!pal.length) pal.push({ r: 0.8, g: 0.8, b: 0.85 });
-  return pal;
-}
-
-function paletteFromImage(img) {
-  try {
-    const c = document.createElement('canvas');
-    c.width = 8; c.height = 8;
-    const ctx = c.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(img, 0, 0, 8, 8);
-    const d = ctx.getImageData(0, 0, 8, 8).data;
-    const pal = [];
-    for (let t = 0; t < 60 && pal.length < 6; t++) {
-      const i = Math.floor(Math.random() * 64) * 4;
-      const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
-      if (r * 0.3 + g * 0.6 + b * 0.1 < 0.12) continue;
-      pal.push({ r, g, b });
-    }
-    if (!pal.length) pal.push({ r: 0.8, g: 0.8, b: 0.85 });
-    return pal;
-  } catch(e) { return [{ r: 0.8, g: 0.8, b: 0.85 }]; }
-}
-
-function paletteAverage() {
-  if (!slidePalette || !slidePalette.length) return { r: 0.78, g: 0.8, b: 0.86 };
-  const m = slidePalette.reduce((a, p) => ({ r: a.r + p.r, g: a.g + p.g, b: a.b + p.b }), { r: 0, g: 0, b: 0 });
-  return { r: m.r / slidePalette.length, g: m.g / slidePalette.length, b: m.b / slidePalette.length };
-}
-
 async function updateAmbientBackground(file) {
   if (!bgSphere || !bgTexture) return;
-  if (!bgAmbientEnabled) bgSphere.enabled = false;
-  if (!bgAmbientEnabled && !particlesEnabled && !mistEnabled) return;
+  if (!bgAmbientEnabled) { bgSphere.enabled = false; return; }
   bgGenSession++;
   const mySession = bgGenSession;
-  if (bgAmbientEnabled) {
-    const vc = bgGetViewpoint();
-    bgSphere.setPosition(vc.x, vc.y, vc.z);
-  }
+  bgDepthMap = null; bgDepthVP = null; // rebuilt below for PLY/SOG slides
+  const vc = bgGetViewpoint();
+  bgSphere.setPosition(vc.x, vc.y, vc.z);
   try {
     let ok = false;
     if (/\.ply$/i.test(file.name) || /\.sog$/i.test(file.name)) {
@@ -1725,10 +1656,7 @@ async function updateAmbientBackground(file) {
         : await bgSamplesFromSOG(file);
       if (mySession !== bgGenSession) return;
       if (samples) samples = bgTrimCore(samples);
-      if (samples) {
-        slidePalette = paletteFromSamples(samples);
-        if (bgAmbientEnabled) { bgBuildTextureFromSamples(samples); ok = bgHasTexture; }
-      }
+      if (samples) { bgBuildTextureFromSamples(samples); ok = bgHasTexture; }
     } else if (isImage(file.name)) {
       const img = await new Promise((res, rej) => {
         const url = URL.createObjectURL(file);
@@ -1738,16 +1666,12 @@ async function updateAmbientBackground(file) {
         im.src = url;
       });
       if (mySession !== bgGenSession) return;
-      slidePalette = paletteFromImage(img);
-      if (bgAmbientEnabled) { bgBuildTextureFromImage(img); ok = bgHasTexture; }
+      bgBuildTextureFromImage(img);
+      ok = bgHasTexture;
     }
-    applyBokehColors();
-    applyMistTint();
-    if (bgAmbientEnabled) {
-      if (!ok) console.warn('bg: ambient extraction unavailable for', file.name);
-      applyBgAmbientStrength();
-      applyBgAmbientVisibility();
-    }
+    if (!ok) console.warn('bg: ambient extraction unavailable for', file.name);
+    applyBgAmbientStrength();
+    applyBgAmbientVisibility();
   } catch(e) {
     console.warn('bg ambient generation failed:', e);
   }
@@ -1777,114 +1701,59 @@ function applyHandColor() {
   });
 }
 
-// ── Bokeh lights ───────────────────────────────────────
-// Few, large, soft radial-gradient billboards with additive blending and a
-// slow pulse — "light in the air" instead of dots. Colors are inherited
-// from the slide's own palette. They never spawn or drift behind the
-// content (splats don't write depth, so geometry can't occlude them).
-
+// ── Particles ──────────────────────────────────────────
 function disposeParticles() {
   particles.forEach(p => { try { p.entity.destroy(); } catch(e){} });
   particles = [];
 }
 
-function createParticleTexture() {
-  if (particleTexture || !app) return;
-  const S = 64;
-  const c = document.createElement('canvas');
-  c.width = S; c.height = S;
-  const ctx = c.getContext('2d');
-  const grad = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.35, 'rgba(255,255,255,0.55)');
-  grad.addColorStop(0.75, 'rgba(255,255,255,0.12)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, S, S);
-  particleTexture = new Texture(app.graphicsDevice, {
-    width: S, height: S, format: PIXELFORMAT_RGBA8, mipmaps: false,
-    addressU: ADDRESS_CLAMP_TO_EDGE, addressV: ADDRESS_CLAMP_TO_EDGE,
-    minFilter: FILTER_LINEAR, magFilter: FILTER_LINEAR
-  });
-  particleTexture.setSource(c);
-}
-
-function bokehViolates(x, y, z) {
-  if (!bokehBound) return false;
-  const b = bokehBound;
-  return (x - b.px) * b.nx + (y - b.py) * b.ny + (z - b.pz) * b.nz < 0.4;
+function buildParticleMaterial() {
+  const c = hexToRgb01(particleColorHex);
+  const mat = new StandardMaterial();
+  mat.emissive = new Color(c.r * particleBright, c.g * particleBright, c.b * particleBright);
+  mat.diffuse = new Color(0,0,0);
+  mat.useLighting = false;
+  mat.opacity = particleOpacity;
+  mat.blendType = BLEND_NORMAL;
+  mat.depthWrite = false;
+  mat.depthTest = particleDepthTest;
+  mat.cull = CULLFACE_NONE;
+  if ('opacityFresnel' in mat) mat.opacityFresnel = 0.7;
+  mat.update();
+  return mat;
 }
 
 function buildParticles() {
   if (!app) return;
   disposeParticles();
-  createParticleTexture();
+  particleMat = buildParticleMaterial();
   for (let i = 0; i < particleCount; i++) {
-    const mat = new StandardMaterial();
-    mat.emissive = new Color(1, 1, 1);
-    mat.emissiveMap = particleTexture;
-    mat.opacityMap = particleTexture;
-    mat.diffuse = new Color(0, 0, 0);
-    mat.useLighting = false;
-    mat.opacity = particleOpacity;
-    mat.blendType = BLEND_ADDITIVEALPHA;
-    mat.depthWrite = false;
-    mat.depthTest = particleDepthTest;
-    mat.cull = CULLFACE_NONE;
-    mat.update();
-    const pivot = new Entity();
-    const quad = new Entity();
-    quad.addComponent('render', { type: 'plane', material: mat });
-    quad.setLocalEulerAngles(-90, 0, 0);
-    pivot.addChild(quad);
-    let x = 0, y = 1, z = 0, tries = 0;
-    do {
-      const a = Math.random() * Math.PI * 2;
-      const rr = 1.2 + Math.random() * 3.0;
-      x = Math.cos(a) * rr; z = Math.sin(a) * rr;
-      y = 0.2 + Math.random() * 2.6;
-      tries++;
-    } while (bokehViolates(x, y, z) && tries < 10);
-    pivot.setPosition(x, y, z);
-    pivot.setLocalScale(particleSize, particleSize, particleSize);
-    app.root.addChild(pivot);
-    particles.push({
-      entity: pivot, mat,
-      vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2, vz: (Math.random() - 0.5) * 2,
-      phase: Math.random() * Math.PI * 2,
-      pulse: 0.4 + Math.random() * 0.7,
-      opMul: 0.55 + Math.random() * 0.45,
-      col: { r: 1, g: 1, b: 1 }
-    });
+    const e = new Entity();
+    e.addComponent('render', { type: 'sphere', material: particleMat });
+    const x = (Math.random() - 0.5) * 8;
+    const y = (Math.random() - 0.5) * 3 + 1.0;
+    const z = (Math.random() - 0.5) * 8;
+    e.setPosition(x, y, z);
+    e.setLocalScale(particleSize, particleSize, particleSize);
+    app.root.addChild(e);
+    const vx = (Math.random() - 0.5) * 2;
+    const vy = (Math.random() - 0.5) * 2;
+    const vz = (Math.random() - 0.5) * 2;
+    particles.push({ entity: e, vx, vy, vz });
   }
   particleRebuildNeeded = false;
-  applyBokehColors();
   setParticlesVisible(particlesEnabled);
 }
 
-function applyBokehColors() {
-  if (!particles.length) return;
-  particles.forEach((p, i) => {
-    let c;
-    if (particleInherit && slidePalette && slidePalette.length) {
-      const base = slidePalette[i % slidePalette.length];
-      const v = 0.85 + ((i * 37) % 100) / 100 * 0.3; // deterministic variety
-      c = { r: clamp01(base.r * v + 0.06), g: clamp01(base.g * v + 0.06), b: clamp01(base.b * v + 0.06) };
-    } else {
-      c = hexToRgb01(particleColorHex);
-    }
-    p.col = c;
-    p.mat.emissive = new Color(c.r * particleBright, c.g * particleBright, c.b * particleBright);
-    p.mat.opacity = particleOpacity * p.opMul * particleVisFactor;
-    p.mat.update();
-  });
-}
-
 function applyParticleSize() {
-  // live size is driven by the pulse in updateParticles; nothing to do here
+  particles.forEach(p => { if (p.entity) p.entity.setLocalScale(particleSize, particleSize, particleSize); });
 }
 function applyParticleAppearance() {
-  applyBokehColors();
+  if (!particleMat) return;
+  const c = hexToRgb01(particleColorHex);
+  particleMat.emissive = new Color(c.r * particleBright, c.g * particleBright, c.b * particleBright);
+  particleMat.opacity = particleOpacity;
+  particleMat.update();
 }
 function setParticlesVisible(v) {
   particles.forEach(p => { if (p.entity) p.entity.enabled = v; });
@@ -1898,13 +1767,14 @@ function updateParticles(dt) {
   let visibilityFactor = 1;
   if (particleVisibility === 'fade-only') visibilityFactor = fadeOpacity > 0.1 ? 1 : 0;
   else if (particleVisibility === 'fade-linked') visibilityFactor = 0.3 + fadeOpacity * 0.7;
-  if (Math.abs(visibilityFactor - particleVisFactor) > 0.02) {
-    particleVisFactor = visibilityFactor;
-    particles.forEach(p => { p.mat.opacity = particleOpacity * p.opMul * particleVisFactor; p.mat.update(); });
+
+  if (particleMat) {
+    const c = hexToRgb01(particleColorHex);
+    const b = particleBright * visibilityFactor;
+    particleMat.emissive = new Color(c.r * b, c.g * b, c.b * b);
+    particleMat.update();
   }
 
-  const camPos = cameraEntity ? cameraEntity.getPosition() : null;
-  const tNow = performance.now() / 1000;
   const speed = particleSpeed * 0.3;
   particles.forEach(p => {
     const pos = p.entity.getPosition();
@@ -1912,139 +1782,49 @@ function updateParticles(dt) {
     if (particleMotion === 'drift') {
       nx += p.vx * speed * dt; ny += p.vy * speed * dt; nz += p.vz * speed * dt;
       if (nx > 4 || nx < -4) p.vx *= -1;
-      if (ny > 3 || ny < 0.1) p.vy *= -1;
+      if (ny > 4 || ny < -1.5) p.vy *= -1;
       if (nz > 4 || nz < -4) p.vz *= -1;
     } else if (particleMotion === 'fall') {
       ny -= speed * dt; nx += p.vx * speed * 0.3 * dt;
-      if (ny < 0.1) ny += 3;
+      if (ny < -1.5) ny += 5;
     } else if (particleMotion === 'radial') {
       const cx = nx, cy = ny - 1.0, cz = nz;
-      const len = Math.sqrt(cx * cx + cy * cy + cz * cz) || 0.01;
+      const len = Math.sqrt(cx*cx + cy*cy + cz*cz) || 0.01;
       const factor = speed * dt / Math.max(0.5, len);
       nx += cx * factor; ny += cy * factor; nz += cz * factor;
-      if (Math.sqrt(cx * cx + cy * cy + cz * cz) > 6) {
+      if (Math.sqrt(cx*cx + cy*cy + cz*cz) > 6) {
         const r = 0.3;
         nx = (Math.random() - 0.5) * r; ny = 1.0 + (Math.random() - 0.5) * r; nz = (Math.random() - 0.5) * r;
       }
     }
-    // Never drift behind the content
-    if (bokehBound) {
-      const b = bokehBound;
-      const d = (nx - b.px) * b.nx + (ny - b.py) * b.ny + (nz - b.pz) * b.nz;
-      if (d < 0.4) {
-        const push = 0.4 - d;
-        nx += b.nx * push; ny += b.ny * push; nz += b.nz * push;
-        const vd = p.vx * b.nx + p.vy * b.ny + p.vz * b.nz;
-        if (vd < 0) { p.vx -= 2 * vd * b.nx; p.vy -= 2 * vd * b.ny; p.vz -= 2 * vd * b.nz; }
-      }
-    }
     p.entity.setPosition(nx, ny, nz);
-    // Slow breathing pulse + camera-facing billboard
-    const sc = particleSize * (0.8 + 0.25 * Math.sin(tNow * p.pulse + p.phase));
-    p.entity.setLocalScale(sc, sc, sc);
-    if (camPos) p.entity.lookAt(camPos.x, camPos.y, camPos.z);
+    updateParticleOcclusion(p, nx, ny, nz, dt);
   });
 }
 
-// ── Ground mist ────────────────────────────────────────
-// Thin layers of softly drifting fog at the floor — the photos float above
-// a quiet sea of mist tinted with the slide's colors.
-
-function createMistTexture() {
-  const S = 128;
-  const c = document.createElement('canvas');
-  c.width = S; c.height = S;
-  const ctx = c.getContext('2d');
-  for (let i = 0; i < 7; i++) {
-    const bx = S * (0.2 + Math.random() * 0.6), by = S * (0.2 + Math.random() * 0.6);
-    const br = S * (0.18 + Math.random() * 0.25);
-    const g = ctx.createRadialGradient(bx, by, 0, bx, by, br);
-    g.addColorStop(0, 'rgba(255,255,255,0.55)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, S, S);
-  }
-  // fade edges so the plane border is invisible
-  const img = ctx.getImageData(0, 0, S, S);
-  for (let v = 0; v < S; v++) {
-    for (let u = 0; u < S; u++) {
-      const du = (u / (S - 1)) * 2 - 1, dv = (v / (S - 1)) * 2 - 1;
-      const edge = clamp01(1.6 * (1 - Math.sqrt(du * du + dv * dv)));
-      img.data[(v * S + u) * 4 + 3] = Math.round(img.data[(v * S + u) * 4 + 3] * edge);
+// Splats don't write depth, so the GPU can't hide particles behind them.
+// Instead we compare each particle's distance (from the viewpoint captured
+// at load) against the per-direction surface distance extracted from the
+// splat data, and shrink-fade particles that sit behind the surface.
+function updateParticleOcclusion(p, x, y, z, dt) {
+  if (!particleOcclusion || !bgDepthMap || !bgDepthVP) {
+    if (p.occl) {
+      p.occl = 0;
+      p.entity.setLocalScale(particleSize, particleSize, particleSize);
     }
+    return;
   }
-  ctx.putImageData(img, 0, 0);
-  return c;
-}
-
-function buildMist() {
-  if (!app || mistLayers.length) return;
-  const layerDefs = [
-    { y: 0.06, scale: 9,  mul: 1.0, rot: 0.5 },
-    { y: 0.22, scale: 12, mul: 0.7, rot: -0.32 },
-    { y: 0.42, scale: 15, mul: 0.45, rot: 0.2 }
-  ];
-  for (const def of layerDefs) {
-    try {
-      const canvas = createMistTexture();
-      const tex = new Texture(app.graphicsDevice, {
-        width: canvas.width, height: canvas.height, format: PIXELFORMAT_RGBA8, mipmaps: false,
-        addressU: ADDRESS_CLAMP_TO_EDGE, addressV: ADDRESS_CLAMP_TO_EDGE,
-        minFilter: FILTER_LINEAR, magFilter: FILTER_LINEAR
-      });
-      tex.setSource(canvas);
-      const mat = new StandardMaterial();
-      mat.emissive = new Color(0.75, 0.78, 0.85);
-      mat.emissiveMap = tex;
-      mat.opacityMap = tex;
-      mat.diffuse = new Color(0, 0, 0);
-      mat.useLighting = false;
-      mat.opacity = mistOpacity * def.mul;
-      mat.blendType = BLEND_NORMAL;
-      mat.depthWrite = false;
-      mat.cull = CULLFACE_NONE;
-      mat.update();
-      const e = new Entity('mist');
-      e.addComponent('render', { type: 'plane', material: mat });
-      e.setPosition((Math.random() - 0.5) * 2, def.y, (Math.random() - 0.5) * 2);
-      e.setLocalScale(def.scale, 1, def.scale);
-      e.setLocalEulerAngles(0, Math.random() * 360, 0);
-      app.root.addChild(e);
-      mistLayers.push({ entity: e, mat, mul: def.mul, rot: def.rot, baseY: def.y, phase: Math.random() * Math.PI * 2 });
-    } catch(e) { console.warn('mist layer failed:', e); }
-  }
-  applyMistTint();
-}
-
-function applyMistTint() {
-  if (!mistLayers.length) return;
-  const avg = paletteAverage();
-  const mix = (a, b, t) => a * (1 - t) + b * t;
-  const tint = {
-    r: mix(0.75, clamp01(avg.r + 0.18), 0.45),
-    g: mix(0.78, clamp01(avg.g + 0.18), 0.45),
-    b: mix(0.85, clamp01(avg.b + 0.18), 0.45)
-  };
-  mistLayers.forEach(l => {
-    l.mat.emissive = new Color(tint.r, tint.g, tint.b);
-    l.mat.opacity = mistOpacity * l.mul;
-    l.mat.update();
-  });
-}
-
-function updateMist(dt) {
-  if (!mistEnabled || !mistLayers.length) return;
-  const t = performance.now() / 1000;
-  mistLayers.forEach(l => {
-    l.entity.rotate(0, l.rot * dt, 0);
-    const p = l.entity.getPosition();
-    l.entity.setPosition(p.x, l.baseY + Math.sin(t * 0.15 + l.phase) * 0.03, p.z);
-  });
-}
-
-function disposeMist() {
-  mistLayers.forEach(l => { try { l.entity.destroy(); } catch(e){} });
-  mistLayers = [];
+  const dx = x - bgDepthVP.x, dy = y - bgDepthVP.y, dz = z - bgDepthVP.z;
+  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  const idx = bgDirToTexel(dx, dy, dz);
+  const surf = idx !== null ? bgDepthMap[idx] : Infinity;
+  const target = dist > surf + 0.15 ? 1 : 0;
+  const cur = p.occl || 0;
+  const next = cur + (target - cur) * Math.min(1, dt * 6);
+  if (Math.abs(next - cur) < 0.001 && next < 0.001) { p.occl = 0; return; }
+  p.occl = next;
+  const sc = Math.max(0.0001, particleSize * (1 - next));
+  p.entity.setLocalScale(sc, sc, sc);
 }
 
 // ── Hand tracking ──────────────────────────────────────
@@ -2161,7 +1941,6 @@ function initApp() {
     updateFade(dt);
     updateAnim(dt);
     updateParticles(dt);
-    updateMist(dt);
     updateHands();
     updateControllerButtons(dt);
     updateEndFade(dt);
@@ -2634,7 +2413,6 @@ async function enterVRSetup() {
   }
   if (!app.xr?.supported) {showToast('VR非対応'); return;}
   if (particlesEnabled) buildParticles();
-  if (mistEnabled) buildMist();
   ensureHandModels().catch(e => console.warn('hand models:', e));
 
   // Initialize AudioContext immediately (needs user gesture)
@@ -2665,6 +2443,7 @@ async function enterVRSetup() {
 
 async function startSlideshowVR() {
   isRunning = true; isPaused = false;
+  setParticlesVisible(particlesEnabled); // END後の再開時に復帰
   startAudio();
   // If auto-interval is on, wait startLag seconds before showing first slide
   // This compensates for the lag between music start and slide appearance
@@ -2674,6 +2453,24 @@ async function startSlideshowVR() {
   if (!isRunning) return; // user may have ended/restarted during the wait
   await showSlide(0);
   scheduleNext();
+}
+
+async function runEndSequence() {
+  showToast(`END sequence: showEnd=${showEnd}`, 'info');
+  await fadeTo(1, fadeTimeMs);
+  disposeCurrentSplat();
+  // Pitch black for the END card: the ambient sky and particles go dark
+  if (bgSphere) bgSphere.enabled = false;
+  setParticlesVisible(false);
+  if (showEnd) {
+    createEndText();
+    showToast(`createEndText done: entity=${endTextEntity?'YES':'NO'}`, 'info');
+    await fadeTo(0, fadeTimeMs);
+    showEndText();
+  }
+  isRunning = false;
+  progressBarEl.style.width = '0%';
+  nextTimerEl.textContent = '--s';
 }
 
 function scheduleNext() {
@@ -2694,18 +2491,7 @@ function scheduleNext() {
     if (!isRunning || isPaused) return;
     const isLast = currentIndex === splatFiles.length - 1;
     if (isLast && (autoEndAfterMusic || !repeatModel)) {
-      showToast(`END sequence: showEnd=${showEnd} isLast=${isLast}`, 'info');
-      await fadeTo(1, fadeTimeMs);
-      disposeCurrentSplat();
-      if (showEnd) {
-        createEndText();
-        showToast(`createEndText done: entity=${endTextEntity?'YES':'NO'}`, 'info');
-        await fadeTo(0, fadeTimeMs);
-        showEndText();
-      }
-      isRunning = false;
-      progressBarEl.style.width = '0%';
-      nextTimerEl.textContent = '--s';
+      await runEndSequence();
       return;
     }
     await showSlide(currentIndex + 1);
@@ -2716,6 +2502,12 @@ function scheduleNext() {
 async function manualAdvance(dir) {
   if (!isRunning || isLoading) return;
   clearTimeout(timer); cancelAnimationFrame(progressRAF);
+  // Advancing past the last slide ends the show (same rule as the timer)
+  const isLast = currentIndex === splatFiles.length - 1;
+  if (dir > 0 && isLast && (autoEndAfterMusic || !repeatModel)) {
+    await runEndSequence();
+    return;
+  }
   await showSlide(currentIndex + dir);
   if (!isPaused) scheduleNext();
 }
@@ -2783,8 +2575,7 @@ function endSlideshow() {
   audioIndex = 0;
   musicEnded = false;
   if (app?.xr?.active) {try{app.xr.end();}catch(e){}}
-  disposeParticles(); particleTexture = null;
-  disposeMist();
+  disposeParticles(); particleMat = null;
   disposeHandModels();
   disposeEndText();
   disposeCurrentSplat();
@@ -2792,6 +2583,7 @@ function endSlideshow() {
   viewerContainerEl.innerHTML = '';
   cameraEntity=null; fadePlane=null; fadeMaterial=null; orbitState=null;
   bgGenSession++; bgSphere=null; bgSphereMat=null; bgTexture=null; bgHasTexture=false;
+  bgDepthMap=null; bgDepthVP=null;
   currentIndex = -1; animProgress = 0; slideCount = 0;
   hudEl.classList.add('hidden'); setupEl.classList.remove('hidden');
   pauseBtn.textContent = '⏸ PAUSE'; progressBarEl.style.width = '0%';
@@ -2861,11 +2653,7 @@ $('download-config-btn').addEventListener('click', () => {
       motion: $('p-motion').value,
       visibility: $('p-visibility').value,
       depthTest: $('p-depth-test').checked,
-      inherit: $('p-inherit').checked
-    },
-    mist: {
-      enabled: $('mist-enabled').checked,
-      opacity: parseFloat($('mist-opacity').value)
+      occlusion: $('p-occlusion').checked
     },
     repeat: {
       model: $('repeat-model').checked,
