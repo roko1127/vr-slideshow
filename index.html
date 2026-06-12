@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v4.6</span>
+      <span class="version">v4.7</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -357,20 +357,20 @@
     </div>
 
     <div class="section">
-      <div class="label">08 ▸ パーティクル</div>
+      <div class="label">08 ▸ 光の玉・ミスト</div>
       <div style="margin-bottom:16px">
-        <label class="check-label"><input type="checkbox" id="particles-enabled" checked> パーティクルを表示</label>
+        <label class="check-label"><input type="checkbox" id="particles-enabled" checked> 光の玉（ボケ）を表示</label>
       </div>
       <div class="settings-grid">
         <div class="s-row">
           <span class="s-key">数</span>
-          <input type="range" id="p-count" min="50" max="500" step="10" value="200">
-          <span class="s-val" id="vp-count">200</span>
+          <input type="range" id="p-count" min="5" max="100" step="5" value="30">
+          <span class="s-val" id="vp-count">30</span>
         </div>
         <div class="s-row">
           <span class="s-key">サイズ</span>
-          <input type="range" id="p-size" min="0.001" max="0.15" step="0.001" value="0.004">
-          <span class="s-val" id="vp-size">0.004</span>
+          <input type="range" id="p-size" min="0.01" max="0.4" step="0.01" value="0.08">
+          <span class="s-val" id="vp-size">0.08</span>
         </div>
         <div class="s-row">
           <span class="s-key">速さ</span>
@@ -384,8 +384,12 @@
         </div>
         <div class="s-row">
           <span class="s-key">透明度</span>
-          <input type="range" id="p-opacity" min="0.05" max="1.0" step="0.05" value="0.2">
-          <span class="s-val" id="vp-opacity">0.20</span>
+          <input type="range" id="p-opacity" min="0.05" max="1.0" step="0.05" value="0.45">
+          <span class="s-val" id="vp-opacity">0.45</span>
+        </div>
+        <div class="s-row">
+          <span class="s-key">色の継承</span>
+          <label class="check-label" style="font-size:14px"><input type="checkbox" id="p-inherit" checked> スライドの色を自動で受け継ぐ（OFFで下の色）</label>
         </div>
         <div class="s-row">
           <span class="s-key">色</span>
@@ -413,6 +417,20 @@
           <label class="check-label" style="font-size:14px"><input type="checkbox" id="p-depth-test"> ONで3Dの後ろに隠れる</label>
         </div>
       </div>
+      <div style="margin-top:18px">
+        <label class="check-label"><input type="checkbox" id="mist-enabled" checked> グラウンドミスト（足元の霧）</label>
+        <div class="settings-grid" id="mist-settings" style="margin-top:14px">
+          <div class="s-row">
+            <span class="s-key">濃さ</span>
+            <input type="range" id="mist-opacity" min="0" max="0.3" step="0.01" value="0.10">
+            <span class="s-val" id="vmist-opacity">0.10</span>
+          </div>
+        </div>
+        <p style="font-size:14px;color:var(--dim);margin-top:8px;line-height:1.6">
+          光の玉とミストの色はスライドから自動で受け継がれます。<br>
+          光の玉は3DGSの後ろには出ません（手前と周囲だけに漂います）
+        </p>
+      </div>
     </div>
 
     <div class="section">
@@ -423,8 +441,6 @@
       </div>
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
         <label class="check-label"><input type="checkbox" id="show-end" checked> END表示</label>
-        <label class="check-label"><input type="checkbox" id="memory-lane" checked> 走馬灯</label>
-        <label class="check-label"><input type="checkbox" id="memory-chime" checked> チャイム</label>
       </div>
       <div class="settings-grid" id="end-settings">
         <div class="s-row">
@@ -451,10 +467,7 @@
       <p style="font-size:14px;color:var(--dim);margin-top:10px;line-height:1.6">
         3DモデルOFF: 最後のスライド後に暗転停止<br>
         音楽OFF: 最後の曲が終わったら停止<br>
-        END表示: リピートOFF時に最後に「END」を表示<br>
-        走馬灯: 最後に全スライドが光の螺旋になって周囲に浮かぶ<br>
-        　見つめたパネルは明るくなって近づく / トリガーでフィナーレへ<br>
-        チャイム: 走馬灯で光が灯る瞬間の小さな鈴の音
+        END表示: リピートOFF時に最後に「END」を表示
       </p>
     </div>
 
@@ -469,8 +482,7 @@
       ✦ トリガーを押すとスライドショー開始<br>
       ✦ 再生中はトリガーで次のスライドへ<br>
       ✦ ハンドトラッキング中は操作無効<br>
-      ✦ <b>没入背景</b>: 標準PLY / SOG / 画像から自動生成（compressed PLYは非対応）<br>
-      ✦ <b>走馬灯</b>: 最後に全スライドの光が周囲を囲む（リピートOFF時）
+      ✦ <b>没入背景</b>: 標準PLY / SOG / 画像から自動生成（compressed PLYは非対応）
     </div>
   </div>
 </div>
@@ -568,32 +580,30 @@ let bgGenSession = 0;
 const BG_EQ_W = 256, BG_EQ_H = 128;
 const BG_VIEWPOINT = { x: 0, y: 1.6, z: 0 };
 
-// Memory lane 2.0 (chronological spiral of gazing-responsive holograms)
-let memoryLaneEnabled = true;
-let memoryChimeEnabled = true;
-let memoryThumbs = [];          // per-slide-index {sharp, blur, avg} (CPU)
-let memoryGroup = null, memoryPanels = [];
-let memoryActive = false, memoryStartAt = 0;
-let memoryPhase = 'idle', memoryFloatAt = 0, memoryConvergeAt = 0;
-let memoryFinaleRequested = false, memoryGroupYaw = 0;
-let memoryOrb = null, memoryOrbMat = null;
-let memoryPrevParticleBright = null;
-const MEMORY_THUMB_S = 160, MEMORY_MAX_PANELS = 48;
 
-// Particles
+// Bokeh lights (formerly particles)
 let particles = [];
-let particleMat = null;
+let particleTexture = null;
 let particlesEnabled = true;
-let particleCount = 200;
-let particleSize = 0.004;
+let particleCount = 30;
+let particleSize = 0.08;
 let particleSpeed = 0.1;
 let particleBright = 1.0;
-let particleOpacity = 0.2;
+let particleOpacity = 0.45;
 let particleColorHex = '#ffffff';
+let particleInherit = true;
 let particleMotion = 'drift';
 let particleVisibility = 'always';
 let particleDepthTest = false;
 let particleRebuildNeeded = false;
+let particleVisFactor = 1;
+let slidePalette = null;
+let bokehBound = null;
+
+// Ground mist
+let mistEnabled = true;
+let mistOpacity = 0.10;
+let mistLayers = [];
 
 // Hand tracking (Meta official models)
 let leftHandModel = null, rightHandModel = null;
@@ -646,17 +656,18 @@ function hexToRgb01(hex) {
 
 // ── Settings UI ────────────────────────────────────────
 function attachStepButtons() {
-  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time','start-lag','lag-offset','end-ox','end-oy','end-oz','bg-strength','bg-soft','bg-falloff'];
+  const sliderIds = ['s-x','s-y','s-z','ax-start','ax-end','ay-start','ay-end','az-start','az-end','p-count','p-size','p-speed','p-bright','p-opacity','fade-time','start-lag','lag-offset','end-ox','end-oy','end-oz','bg-strength','bg-soft','bg-falloff','mist-opacity'];
   sliderIds.forEach(id => {
     const slider = $(id);
     if (!slider) return;
     const min = parseFloat(slider.min);
     const max = parseFloat(slider.max);
     let stepDelta = 0.05;
-    if (id === 'p-count') stepDelta = 10;
-    else if (id === 'p-size') stepDelta = 0.001;
+    if (id === 'p-count') stepDelta = 5;
+    else if (id === 'p-size') stepDelta = 0.01;
     else if (id === 'fade-time') stepDelta = 0.1;
     else if (id === 'bg-soft') stepDelta = 1;
+    else if (id === 'mist-opacity') stepDelta = 0.01;
     const mk = (label, delta) => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'step-btn'; b.textContent = label;
@@ -698,7 +709,7 @@ function initUI() {
   bindSlider('az-end','vaz-end', v=>v.toFixed(2), v=>{anim.ze=v;});
 
   bindSlider('p-count','vp-count', v=>String(Math.round(v)), v=>{particleCount=Math.round(v); particleRebuildNeeded=true;});
-  bindSlider('p-size','vp-size', v=>v.toFixed(3), v=>{particleSize=v; applyParticleSize();});
+  bindSlider('p-size','vp-size', v=>v.toFixed(2), v=>{particleSize=v; applyParticleSize();});
   bindSlider('p-speed','vp-speed', v=>v.toFixed(2), v=>{particleSpeed=v;});
   bindSlider('p-bright','vp-bright', v=>v.toFixed(2), v=>{particleBright=v; applyParticleAppearance();});
   bindSlider('p-opacity','vp-opacity', v=>v.toFixed(2), v=>{particleOpacity=v; applyParticleAppearance();});
@@ -712,7 +723,22 @@ function initUI() {
   $('p-visibility').addEventListener('change', e => { particleVisibility = e.target.value; });
   $('p-depth-test').addEventListener('change', e => {
     particleDepthTest = e.target.checked;
-    if (particleMat) { particleMat.depthTest = particleDepthTest; particleMat.update(); }
+    particles.forEach(p => { p.mat.depthTest = particleDepthTest; p.mat.update(); });
+  });
+  $('p-inherit').addEventListener('change', e => {
+    particleInherit = e.target.checked;
+    applyBokehColors();
+  });
+  $('mist-enabled').addEventListener('change', e => {
+    mistEnabled = e.target.checked;
+    if (mistEnabled && app && !mistLayers.length) buildMist();
+    mistLayers.forEach(l => { l.entity.enabled = mistEnabled; });
+    const ms = $('mist-settings');
+    if (ms) ms.style.opacity = mistEnabled ? '1' : '0.4';
+  });
+  bindSlider('mist-opacity','vmist-opacity', v=>v.toFixed(2), v=>{
+    mistOpacity = v;
+    applyMistTint();
   });
   $('particles-enabled').addEventListener('change', e => {
     particlesEnabled = e.target.checked;
@@ -749,12 +775,6 @@ function initUI() {
     bgAmbientFalloff = v;
   });
 
-  $('memory-lane').addEventListener('change', e => {
-    memoryLaneEnabled = e.target.checked;
-  });
-  $('memory-chime').addEventListener('change', e => {
-    memoryChimeEnabled = e.target.checked;
-  });
 
   $('show-end').addEventListener('change', e => {
     showEnd = e.target.checked;
@@ -825,14 +845,15 @@ function readCfg() {
   particleMotion = $('p-motion').value;
   particleVisibility = $('p-visibility').value;
   particleDepthTest = $('p-depth-test').checked;
+  particleInherit = $('p-inherit').checked;
+  mistEnabled = $('mist-enabled').checked;
+  mistOpacity = parseFloat($('mist-opacity').value);
   bgColorHex = $('bg-color').value;
   handColorHex = $('hand-color').value;
   bgAmbientEnabled = $('bg-ambient').checked;
   bgAmbientStrength = parseFloat($('bg-strength').value);
   bgAmbientSoft = Math.round(parseFloat($('bg-soft').value));
   bgAmbientFalloff = parseFloat($('bg-falloff').value);
-  memoryLaneEnabled = $('memory-lane').checked;
-  memoryChimeEnabled = $('memory-chime').checked;
 }
 
 // ── Splat transform ────────────────────────────────────
@@ -1101,13 +1122,16 @@ function applyConfigFromJson(cfg) {
     setSelect('p-motion',cfg.particles.motion);
     setSelect('p-visibility',cfg.particles.visibility);
     setCheckbox('p-depth-test',cfg.particles.depthTest);
+    setCheckbox('p-inherit',cfg.particles.inherit);
+  }
+  if (cfg.mist) {
+    setCheckbox('mist-enabled',cfg.mist.enabled);
+    setSliderVal('mist-opacity',cfg.mist.opacity);
   }
   if (cfg.repeat) {
     setCheckbox('repeat-model',cfg.repeat.model);
     setCheckbox('repeat-music',cfg.repeat.music);
     setCheckbox('show-end',cfg.repeat.showEnd);
-    setCheckbox('memory-lane',cfg.repeat.memoryLane);
-    setCheckbox('memory-chime',cfg.repeat.memoryChime);
     if (cfg.repeat.endColor) setColorVal('end-color','vend-color',cfg.repeat.endColor);
     setSliderVal('end-ox',cfg.repeat.endOffsetX);
     setSliderVal('end-oy',cfg.repeat.endOffsetY);
@@ -1643,549 +1667,52 @@ function bgFinishTexture(sr, sg, sb, cnt) {
   return true;
 }
 
-// ── Memory lane 2.0 (v4.6) ─────────────────────────────
-// Memories rise as a chronological spiral of glowing holograms. Each one
-// ignites as a blurred blob of light that slowly comes into focus (the act
-// of remembering). The panel you gaze at brightens and drifts closer. After
-// floating a while (or on trigger) the spiral unwinds and every light
-// converges into a single orb — then END.
-
 const BLEND_ADDITIVEALPHA = 6; // measured from playcanvas 2.18.1
-const MEMORY_FLOAT_SECONDS = 30;
 
-function memoryAvgFromArrays(r, g, b, a, N) {
-  let ar = 0, ag = 0, ab = 0, n = 0;
-  for (let i = 0; i < N; i++) if (a[i] > 0.5) { ar += r[i]; ag += g[i]; ab += b[i]; n++; }
-  if (!n) return { r: 0.5, g: 0.5, b: 0.5 };
-  return { r: ar / n, g: ag / n, b: ab / n };
+// ── Slide palette (feeds bokeh lights + mist tint) ─────
+function paletteFromSamples(samples) {
+  const pal = [];
+  for (let t = 0; t < 60 && pal.length < 6; t++) {
+    const p = samples[Math.floor(Math.random() * samples.length)];
+    const lum = p.r * 0.3 + p.g * 0.6 + p.b * 0.1;
+    if (lum < 0.12) continue; // skip near-black picks
+    pal.push({ r: p.r, g: p.g, b: p.b });
+  }
+  if (!pal.length) pal.push({ r: 0.8, g: 0.8, b: 0.85 });
+  return pal;
 }
 
-function memoryCanvasesFromArrays(r, g, b, a, S) {
-  const N = S * S;
-  // Soft edge: feather the alpha outward 2 passes, after first dilating the
-  // colors outward so the feathered rim has a color to show
-  const cr = r.slice(), cg = g.slice(), cb = b.slice();
-  const solid = new Uint8Array(N);
-  for (let i = 0; i < N; i++) solid[i] = a[i] > 0.5 ? 1 : 0;
-  for (let pass = 0; pass < 3; pass++) {
-    const ns = solid.slice();
-    for (let v = 0; v < S; v++) {
-      for (let u = 0; u < S; u++) {
-        const i = v * S + u;
-        if (solid[i]) continue;
-        let ar = 0, ag = 0, ab = 0, n = 0;
-        if (u > 0 && solid[i - 1]) { ar += cr[i - 1]; ag += cg[i - 1]; ab += cb[i - 1]; n++; }
-        if (u < S - 1 && solid[i + 1]) { ar += cr[i + 1]; ag += cg[i + 1]; ab += cb[i + 1]; n++; }
-        if (v > 0 && solid[i - S]) { ar += cr[i - S]; ag += cg[i - S]; ab += cb[i - S]; n++; }
-        if (v < S - 1 && solid[i + S]) { ar += cr[i + S]; ag += cg[i + S]; ab += cb[i + S]; n++; }
-        if (n) { cr[i] = ar / n; cg[i] = ag / n; cb[i] = ab / n; ns[i] = 1; }
-      }
-    }
-    solid.set(ns);
-  }
-  let fa = Float32Array.from(a);
-  for (let pass = 0; pass < 2; pass++) {
-    const na = new Float32Array(N);
-    for (let v = 0; v < S; v++) {
-      for (let u = 0; u < S; u++) {
-        let sum = 0, n = 0;
-        for (let dv = -1; dv <= 1; dv++) {
-          const vv = v + dv;
-          if (vv < 0 || vv >= S) continue;
-          for (let du = -1; du <= 1; du++) {
-            const uu = u + du;
-            if (uu < 0 || uu >= S) continue;
-            sum += fa[vv * S + uu]; n++;
-          }
-        }
-        na[v * S + u] = sum / n;
-      }
-    }
-    fa = na;
-  }
-  // Sharp canvas (rows pre-flipped: END-text recipe)
-  const sharp = document.createElement('canvas');
-  sharp.width = S; sharp.height = S;
-  const sctx = sharp.getContext('2d');
-  const simg = sctx.createImageData(S, S);
-  for (let v = 0; v < S; v++) {
-    const src = v * S, dst = (S - 1 - v) * S;
-    for (let u = 0; u < S; u++) {
-      const i = src + u, o = (dst + u) * 4;
-      simg.data[o] = Math.round(clamp01(cr[i]) * 255);
-      simg.data[o + 1] = Math.round(clamp01(cg[i]) * 255);
-      simg.data[o + 2] = Math.round(clamp01(cb[i]) * 255);
-      simg.data[o + 3] = Math.round(clamp01(fa[i]) * 235);
-    }
-  }
-  sctx.putImageData(simg, 0, 0);
-  // Glow canvas: premultiplied + heavily blurred + brightened. RGB outside
-  // fades to black so additive blending adds nothing there.
-  let pr = new Float32Array(N), pg = new Float32Array(N), pb = new Float32Array(N);
-  for (let i = 0; i < N; i++) { pr[i] = cr[i] * fa[i]; pg[i] = cg[i] * fa[i]; pb[i] = cb[i] * fa[i]; }
-  for (let pass = 0; pass < 8; pass++) {
-    const nr = new Float32Array(N), ng = new Float32Array(N), nb = new Float32Array(N);
-    for (let v = 0; v < S; v++) {
-      for (let u = 0; u < S; u++) {
-        let ar = 0, ag = 0, ab = 0, n = 0;
-        for (let dv = -1; dv <= 1; dv++) {
-          const vv = v + dv;
-          if (vv < 0 || vv >= S) continue;
-          for (let du = -1; du <= 1; du++) {
-            const uu = u + du;
-            if (uu < 0 || uu >= S) continue;
-            const j = vv * S + uu;
-            ar += pr[j]; ag += pg[j]; ab += pb[j]; n++;
-          }
-        }
-        const i = v * S + u;
-        nr[i] = ar / n; ng[i] = ag / n; nb[i] = ab / n;
-      }
-    }
-    pr = nr; pg = ng; pb = nb;
-  }
-  const blur = document.createElement('canvas');
-  blur.width = S; blur.height = S;
-  const bctx = blur.getContext('2d');
-  const bimg = bctx.createImageData(S, S);
-  for (let v = 0; v < S; v++) {
-    const src = v * S, dst = (S - 1 - v) * S;
-    for (let u = 0; u < S; u++) {
-      const i = src + u, o = (dst + u) * 4;
-      bimg.data[o] = Math.round(clamp01(pr[i] * 1.25) * 255);
-      bimg.data[o + 1] = Math.round(clamp01(pg[i] * 1.25) * 255);
-      bimg.data[o + 2] = Math.round(clamp01(pb[i] * 1.25) * 255);
-      bimg.data[o + 3] = 255;
-    }
-  }
-  bctx.putImageData(bimg, 0, 0);
-  return { sharp, blur, avg: memoryAvgFromArrays(cr, cg, cb, fa, N) };
-}
-
-function memoryThumbFromSamples(samples) {
-  const S = MEMORY_THUMB_S, N = S * S;
-  const xs = samples.map(p => p.x).sort((a, b) => a - b);
-  const ys = samples.map(p => -p.y).sort((a, b) => a - b); // up = -y (entity rotX 180)
-  const pct = (arr, q) => arr[Math.floor(q * (arr.length - 1))];
-  const x0 = pct(xs, 0.03), x1 = pct(xs, 0.97), y0 = pct(ys, 0.03), y1 = pct(ys, 0.97);
-  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-  const half = Math.max(x1 - x0, y1 - y0) / 2 * 1.08 || 1;
-  const sr = new Float32Array(N), sg = new Float32Array(N), sb = new Float32Array(N), cnt = new Float32Array(N);
-  for (const p of samples) {
-    const ow = p.o !== undefined ? p.o : 1;
-    const fu = ((p.x - cx) / half * 0.5 + 0.5) * S - 0.5;
-    const fv = (0.5 - (-p.y - cy) / half * 0.5) * S - 0.5; // row 0 = top
-    const u0 = Math.floor(fu), v0 = Math.floor(fv);
-    const tu = fu - u0, tv = fv - v0;
-    for (let dv = 0; dv <= 1; dv++) {
-      const v = v0 + dv;
-      if (v < 0 || v >= S) continue;
-      const wv = dv ? tv : 1 - tv;
-      for (let du = 0; du <= 1; du++) {
-        const u = u0 + du;
-        if (u < 0 || u >= S) continue;
-        const w = wv * (du ? tu : 1 - tu) * ow;
-        if (w <= 0) continue;
-        const i = v * S + u;
-        sr[i] += p.r * w; sg[i] += p.g * w; sb[i] += p.b * w; cnt[i] += w;
-      }
-    }
-  }
-  const r = new Float32Array(N), g = new Float32Array(N), b = new Float32Array(N), a = new Float32Array(N);
-  for (let i = 0; i < N; i++) {
-    if (cnt[i] > 0.18) { r[i] = sr[i] / cnt[i]; g[i] = sg[i] / cnt[i]; b[i] = sb[i] / cnt[i]; a[i] = 1; }
-  }
-  for (let pass = 0; pass < 2; pass++) {
-    const na = a.slice(), nr = r.slice(), ng = g.slice(), nb = b.slice();
-    for (let v = 0; v < S; v++) {
-      for (let u = 0; u < S; u++) {
-        const i = v * S + u;
-        if (a[i] > 0) continue;
-        let ar = 0, ag = 0, ab = 0, n = 0;
-        if (u > 0 && a[i - 1] > 0) { ar += r[i - 1]; ag += g[i - 1]; ab += b[i - 1]; n++; }
-        if (u < S - 1 && a[i + 1] > 0) { ar += r[i + 1]; ag += g[i + 1]; ab += b[i + 1]; n++; }
-        if (v > 0 && a[i - S] > 0) { ar += r[i - S]; ag += g[i - S]; ab += b[i - S]; n++; }
-        if (v < S - 1 && a[i + S] > 0) { ar += r[i + S]; ag += g[i + S]; ab += b[i + S]; n++; }
-        if (n >= 2) { nr[i] = ar / n; ng[i] = ag / n; nb[i] = ab / n; na[i] = 1; }
-      }
-    }
-    a.set(na); r.set(nr); g.set(ng); b.set(nb);
-  }
-  {
-    const nr = r.slice(), ng = g.slice(), nb = b.slice();
-    for (let v = 0; v < S; v++) {
-      for (let u = 0; u < S; u++) {
-        const i = v * S + u;
-        if (a[i] === 0) continue;
-        let ar = 0, ag = 0, ab = 0, n = 0;
-        for (let dv = -1; dv <= 1; dv++) {
-          const vv = v + dv;
-          if (vv < 0 || vv >= S) continue;
-          for (let du = -1; du <= 1; du++) {
-            const uu = u + du;
-            if (uu < 0 || uu >= S) continue;
-            const j = vv * S + uu;
-            if (a[j] > 0) { ar += r[j]; ag += g[j]; ab += b[j]; n++; }
-          }
-        }
-        nr[i] = ar / n; ng[i] = ag / n; nb[i] = ab / n;
-      }
-    }
-    r.set(nr); g.set(ng); b.set(nb);
-  }
-  return memoryCanvasesFromArrays(r, g, b, a, S);
-}
-
-function memoryThumbFromImage(img) {
-  const S = MEMORY_THUMB_S, N = S * S;
-  // Draw fit-inside, then hand the pixels to the same canvas builder so
-  // images get the identical soft edge / glow / avg treatment
-  const tmp = document.createElement('canvas');
-  tmp.width = S; tmp.height = S;
-  const tctx = tmp.getContext('2d', { willReadFrequently: true });
-  const scale = Math.min(S / img.width, S / img.height);
-  const dw = img.width * scale, dh = img.height * scale;
-  tctx.drawImage(img, (S - dw) / 2, (S - dh) / 2, dw, dh);
-  const d = tctx.getImageData(0, 0, S, S).data;
-  const r = new Float32Array(N), g = new Float32Array(N), b = new Float32Array(N), a = new Float32Array(N);
-  for (let i = 0; i < N; i++) {
-    if (d[i * 4 + 3] > 10) {
-      r[i] = d[i * 4] / 255; g[i] = d[i * 4 + 1] / 255; b[i] = d[i * 4 + 2] / 255; a[i] = 1;
-    }
-  }
-  return memoryCanvasesFromArrays(r, g, b, a, S);
-}
-
-function memoryChime(k) {
-  if (!memoryChimeEnabled) return;
-  if (!audioCtx || audioCtx.state !== 'running') return;
+function paletteFromImage(img) {
   try {
-    const scale = [1, 9/8, 5/4, 3/2, 5/3];
-    const f = 660 * scale[k % scale.length] * (k % 10 >= 5 ? 2 : 1) * 0.5;
-    const t = audioCtx.currentTime;
-    const gain = audioCtx.createGain();
-    gain.gain.setValueAtTime(0.035, t);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
-    gain.connect(audioCtx.destination);
-    [1, 2.756].forEach((mult, oi) => {
-      const osc = audioCtx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.value = f * mult;
-      const og = audioCtx.createGain();
-      og.gain.value = oi === 0 ? 1 : 0.3;
-      osc.connect(og); og.connect(gain);
-      osc.start(t); osc.stop(t + 1.0);
-    });
-  } catch(e){}
-}
-
-function memoryRecallAmbient() {
-  // The sky becomes a gradient woven from every memory's average color
-  if (!bgAmbientEnabled || !bgTexture || !memoryPanels.length) return;
-  try {
-    const stops = memoryPanels.map(p => p.avg).filter(Boolean);
-    if (!stops.length) return;
-    stops.sort((p, q) => (p.r * 0.3 + p.g * 0.6 + p.b * 0.1) - (q.r * 0.3 + q.g * 0.6 + q.b * 0.1));
-    const canvas = document.createElement('canvas');
-    canvas.width = BG_EQ_W; canvas.height = BG_EQ_H;
-    const ctx = canvas.getContext('2d');
-    const img = ctx.createImageData(BG_EQ_W, BG_EQ_H);
-    for (let v = 0; v < BG_EQ_H; v++) {
-      const t = 1 - v / (BG_EQ_H - 1); // darkest at the bottom
-      const fpos = t * (stops.length - 1);
-      const i0 = Math.floor(fpos), i1 = Math.min(stops.length - 1, i0 + 1);
-      const ft = fpos - i0;
-      const cr = (stops[i0].r * (1 - ft) + stops[i1].r * ft) * 0.85;
-      const cg = (stops[i0].g * (1 - ft) + stops[i1].g * ft) * 0.85;
-      const cb = (stops[i0].b * (1 - ft) + stops[i1].b * ft) * 0.85;
-      for (let u = 0; u < BG_EQ_W; u++) {
-        const o = (v * BG_EQ_W + u) * 4;
-        img.data[o] = Math.round(clamp01(cr) * 255);
-        img.data[o + 1] = Math.round(clamp01(cg) * 255);
-        img.data[o + 2] = Math.round(clamp01(cb) * 255);
-        img.data[o + 3] = 255;
-      }
+    const c = document.createElement('canvas');
+    c.width = 8; c.height = 8;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, 8, 8);
+    const d = ctx.getImageData(0, 0, 8, 8).data;
+    const pal = [];
+    for (let t = 0; t < 60 && pal.length < 6; t++) {
+      const i = Math.floor(Math.random() * 64) * 4;
+      const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
+      if (r * 0.3 + g * 0.6 + b * 0.1 < 0.12) continue;
+      pal.push({ r, g, b });
     }
-    ctx.putImageData(img, 0, 0);
-    bgTexture.setSource(canvas);
-    bgHasTexture = true;
-    applyBgAmbientVisibility();
-  } catch(e) { console.warn('recall ambient:', e); }
+    if (!pal.length) pal.push({ r: 0.8, g: 0.8, b: 0.85 });
+    return pal;
+  } catch(e) { return [{ r: 0.8, g: 0.8, b: 0.85 }]; }
 }
 
-function createMemoryLane() {
-  if (!app || memoryGroup) return;
-  const entries = [];
-  for (let i = 0; i < splatFiles.length; i++) {
-    if (memoryThumbs[i] && memoryThumbs[i].sharp) entries.push(memoryThumbs[i]);
-  }
-  if (!entries.length) return;
-  let chosen = entries;
-  if (entries.length > MEMORY_MAX_PANELS) {
-    chosen = [];
-    for (let k = 0; k < MEMORY_MAX_PANELS; k++) chosen.push(entries[Math.floor(k * entries.length / MEMORY_MAX_PANELS)]);
-  }
-  memoryGroup = new Entity('memory-lane');
-  app.root.addChild(memoryGroup);
-  memoryGroupYaw = 0;
-  const n = chosen.length;
-  // Chronological rising spiral: first memory low, time winds upward.
-  // The last (most recent) memory ends dead ahead.
-  const perTurn = Math.min(18, Math.max(8, n));
-  const step = 360 / perTurn;
-  let delay = 0.8;
-  chosen.forEach((thumb, k) => {
-    try {
-      const mkTex = canvas => {
-        const t = new Texture(app.graphicsDevice, {
-          width: canvas.width, height: canvas.height,
-          format: PIXELFORMAT_RGBA8, mipmaps: false,
-          addressU: ADDRESS_CLAMP_TO_EDGE, addressV: ADDRESS_CLAMP_TO_EDGE,
-          minFilter: FILTER_LINEAR, magFilter: FILTER_LINEAR
-        });
-        t.setSource(canvas);
-        return t;
-      };
-      const sharpTex = mkTex(thumb.sharp);
-      const glowTex = mkTex(thumb.blur);
-      const mainMat = new StandardMaterial();
-      mainMat.emissive = new Color(1, 1, 1);
-      mainMat.emissiveMap = sharpTex;
-      mainMat.opacityMap = sharpTex;
-      mainMat.diffuse = new Color(0, 0, 0);
-      mainMat.useLighting = false;
-      mainMat.opacity = 0;
-      mainMat.blendType = BLEND_NORMAL;
-      mainMat.cull = CULLFACE_NONE;
-      mainMat.depthWrite = false;
-      mainMat.update();
-      const glowMat = new StandardMaterial();
-      glowMat.emissive = new Color(1, 1, 1);
-      glowMat.emissiveMap = glowTex;
-      glowMat.diffuse = new Color(0, 0, 0);
-      glowMat.useLighting = false;
-      glowMat.opacity = 0;
-      glowMat.blendType = BLEND_ADDITIVEALPHA;
-      glowMat.cull = CULLFACE_NONE;
-      glowMat.depthWrite = false;
-      glowMat.update();
-      const frac = n > 1 ? k / (n - 1) : 0;
-      const yawDeg = (k - (n - 1)) * step;
-      const baseY = 1.15 + frac * 1.25;
-      const radius = 2.7 + frac * 0.7;
-      const size = 0.85 * (1 + 0.08 * Math.sin(k * 2.399));
-      const pivot = new Entity();
-      pivot.setLocalEulerAngles(0, yawDeg, 0);
-      const holder = new Entity();
-      holder.setLocalPosition(0, baseY, -radius);
-      const panel = new Entity();
-      panel.addComponent('render', { type: 'plane', material: mainMat });
-      panel.setLocalEulerAngles(-90, 0, 0);
-      panel.setLocalScale(size, 1, size);
-      const glow = new Entity();
-      glow.addComponent('render', { type: 'plane', material: glowMat });
-      glow.setLocalEulerAngles(-90, 0, 0);
-      glow.setLocalScale(size * 1.7, 1, size * 1.7);
-      glow.setLocalPosition(0, 0, -0.06); // just behind the panel
-      holder.addChild(glow);
-      holder.addChild(panel);
-      pivot.addChild(holder);
-      memoryGroup.addChild(pivot);
-      // Accelerando: slow first ignitions, quickening — the newest memory
-      // waits a beat before lighting up in front
-      const gap = Math.max(0.13, 0.55 * Math.pow(0.9, k));
-      delay += gap;
-      if (k === n - 1) delay += 1.2;
-      memoryPanels.push({
-        mainMat, glowMat, panel, glow, holder, pivot,
-        sharpTex, glowTex, avg: thumb.avg,
-        baseY, radius, size, yawDeg, delay,
-        phase: Math.random() * Math.PI * 2,
-        focus: 0, lit: false, conv: null
-      });
-    } catch(e) { console.warn('memory panel failed:', e); }
-  });
-  memoryPhase = 'in';
-  memoryFinaleRequested = false;
-}
-
-function startMemoryLane() {
-  if (!memoryGroup || !memoryPanels.length) return;
-  memoryActive = true;
-  memoryStartAt = performance.now();
-  memoryPhase = 'in';
-  memoryPrevParticleBright = particleBright;
-  particleBright = Math.min(2, particleBright * 1.3);
-  memoryRecallAmbient();
-}
-
-function memoryRequestFinale() {
-  if (memoryPhase === 'in' || memoryPhase === 'float') memoryFinaleRequested = true;
-}
-
-function memoryBeginConverge() {
-  memoryPhase = 'converge';
-  memoryConvergeAt = performance.now();
-  // Convergence target in front of the viewer, expressed per panel in its
-  // own pivot-local space (group yaw + pivot yaw are pure Y rotations)
-  const T = { x: 0, y: 1.5, z: -1.6 };
-  for (const p of memoryPanels) {
-    const total = (memoryGroupYaw + p.yawDeg) * Math.PI / 180;
-    const c = Math.cos(-total), si = Math.sin(-total);
-    p.conv = {
-      sx: p.holder.getLocalPosition().x, sy: p.holder.getLocalPosition().y, sz: p.holder.getLocalPosition().z,
-      tx: c * T.x + si * T.z, ty: T.y, tz: -si * T.x + c * T.z
-    };
-  }
-  // Central orb
-  try {
-    const mat = new StandardMaterial();
-    const avg = memoryPanels.reduce((acc, p) => ({ r: acc.r + p.avg.r, g: acc.g + p.avg.g, b: acc.b + p.avg.b }), { r: 0, g: 0, b: 0 });
-    const m = memoryPanels.length;
-    mat.emissive = new Color(Math.min(1, avg.r / m + 0.35), Math.min(1, avg.g / m + 0.35), Math.min(1, avg.b / m + 0.35));
-    mat.diffuse = new Color(0, 0, 0);
-    mat.useLighting = false;
-    mat.opacity = 0;
-    mat.blendType = BLEND_ADDITIVEALPHA;
-    mat.depthWrite = false;
-    mat.update();
-    memoryOrb = new Entity('memory-orb');
-    memoryOrb.addComponent('render', { type: 'sphere', material: mat });
-    memoryOrb.setLocalScale(0.18, 0.18, 0.18);
-    memoryOrb.setPosition(0, 1.5, -1.6);
-    app.root.addChild(memoryOrb);
-    memoryOrbMat = mat;
-  } catch(e){}
-}
-
-function updateMemoryLane(dt) {
-  if (!memoryActive || !memoryGroup) return;
-  const now = performance.now();
-  const t = (now - memoryStartAt) / 1000;
-  const smooth = x => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
-
-  if (memoryPhase === 'in' || memoryPhase === 'float') {
-    memoryGroupYaw += dt * 0.5;
-    memoryGroup.setLocalEulerAngles(0, memoryGroupYaw, 0);
-    // Gaze: which panel is the viewer looking at?
-    let bestIdx = -1, bestDot = 0.982; // ~11 degrees
-    if (cameraEntity) {
-      const fwd = cameraEntity.forward;
-      const cam = cameraEntity.getPosition();
-      for (let i = 0; i < memoryPanels.length; i++) {
-        const p = memoryPanels[i];
-        if (!p.lit) continue;
-        const wp = p.holder.getPosition();
-        const dx = wp.x - cam.x, dy = wp.y - cam.y, dz = wp.z - cam.z;
-        const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-        const dot = (dx * fwd.x + dy * fwd.y + dz * fwd.z) / len;
-        if (dot > bestDot) { bestDot = dot; bestIdx = i; }
-      }
-    }
-    let allLit = true;
-    memoryPanels.forEach((p, i) => {
-      // Ignition: a blob of light that resolves into focus
-      const lt = (t - p.delay) / 1.5;
-      if (lt <= 0) { allLit = false; return; }
-      if (!p.lit && lt > 0) { p.lit = true; memoryChime(i); }
-      const glowIn = smooth(lt / 0.5);
-      const focusIn = smooth((lt - 0.35) / 0.65);
-      if (lt < 1.2) allLit = false;
-      // Gaze response
-      const want = i === bestIdx ? 1 : 0;
-      p.focus += (want - p.focus) * Math.min(1, dt * 4);
-      const f = p.focus;
-      const baseGlow = 0.85 * glowIn - 0.5 * focusIn; // bright blob settles down
-      const newGlow = Math.max(0.2 * glowIn, baseGlow) + 0.25 * f;
-      const newMain = 0.95 * focusIn;
-      if (Math.abs(newGlow - p.glowMat.opacity) > 0.004) { p.glowMat.opacity = newGlow; p.glowMat.update(); }
-      if (Math.abs(newMain - p.mainMat.opacity) > 0.004) { p.mainMat.opacity = newMain; p.mainMat.update(); }
-      const eb = 1 + 0.45 * f;
-      if (Math.abs(eb - p.mainMat.emissive.r) > 0.01) { p.mainMat.emissive = new Color(eb, eb, eb); p.mainMat.update(); }
-      // Floating + drift closer under gaze
-      const bob = Math.sin(t * 0.45 + p.phase) * 0.025;
-      p.holder.setLocalPosition(0, p.baseY + bob + (1 - smooth(lt)) * -0.1, -(p.radius - 0.5 * f));
-      const sc = p.size * (0.8 + 0.2 * smooth(lt)) * (1 + 0.18 * f);
-      p.panel.setLocalScale(sc, 1, sc);
-      p.panel.setLocalEulerAngles(-90, 0, Math.sin(t * 0.3 + p.phase) * 1.6);
-      p.glow.setLocalScale(sc * 1.7, 1, sc * 1.7);
-    });
-    if (memoryPhase === 'in' && allLit) { memoryPhase = 'float'; memoryFloatAt = now; }
-    const floatFor = memoryPhase === 'float' ? (now - memoryFloatAt) / 1000 : 0;
-    if (memoryFinaleRequested || floatFor > MEMORY_FLOAT_SECONDS) memoryBeginConverge();
-    return;
-  }
-
-  if (memoryPhase === 'converge') {
-    const ct = (now - memoryConvergeAt) / 1000;
-    let done = true;
-    memoryPanels.forEach((p, i) => {
-      const lt = (ct - i * 0.025) / 2.8;
-      if (lt < 1) done = false;
-      const e = smooth(lt);
-      if (!p.conv) return;
-      p.holder.setLocalPosition(
-        p.conv.sx + (p.conv.tx - p.conv.sx) * e,
-        p.conv.sy + (p.conv.ty - p.conv.sy) * e,
-        p.conv.sz + (p.conv.tz - p.conv.sz) * e
-      );
-      const sc = p.size * (1 - 0.85 * e);
-      p.panel.setLocalScale(Math.max(0.01, sc), 1, Math.max(0.01, sc));
-      p.glow.setLocalScale(Math.max(0.01, sc * 1.7), 1, Math.max(0.01, sc * 1.7));
-      const fade = Math.max(0, 1 - e * 1.15);
-      p.mainMat.opacity = 0.95 * fade; p.mainMat.update();
-      p.glowMat.opacity = 0.4 * fade; p.glowMat.update();
-    });
-    if (memoryOrbMat) {
-      memoryOrbMat.opacity = Math.min(0.9, smooth(ct / 2.4) * 0.9);
-      memoryOrbMat.update();
-      const pulse = 0.18 * (1 + 0.15 * Math.sin(ct * 3));
-      memoryOrb.setLocalScale(pulse, pulse, pulse);
-    }
-    if (done) { memoryPhase = 'fadeout'; memoryConvergeAt = now; }
-    return;
-  }
-
-  if (memoryPhase === 'fadeout') {
-    const ft = (now - memoryConvergeAt) / 1000;
-    if (memoryOrbMat) {
-      const e = smooth(ft / 1.6);
-      memoryOrbMat.opacity = 0.9 * (1 - e);
-      memoryOrbMat.update();
-      const sc = 0.18 * (1 + e * 0.6);
-      memoryOrb.setLocalScale(sc, sc, sc);
-    }
-    if (ft > 1.7) {
-      const wantEnd = showEnd && endTextEntity;
-      disposeMemoryLane();
-      if (wantEnd) showEndText();
-    }
-  }
-}
-
-function disposeMemoryLane() {
-  memoryActive = false;
-  memoryPhase = 'idle';
-  memoryFinaleRequested = false;
-  if (memoryPrevParticleBright !== null) { particleBright = memoryPrevParticleBright; memoryPrevParticleBright = null; }
-  memoryPanels.forEach(p => {
-    try { p.sharpTex.destroy(); } catch(e){}
-    try { p.glowTex.destroy(); } catch(e){}
-  });
-  memoryPanels = [];
-  if (memoryGroup) { try { memoryGroup.destroy(); } catch(e){} }
-  memoryGroup = null;
-  if (memoryOrb) { try { memoryOrb.destroy(); } catch(e){} }
-  memoryOrb = null; memoryOrbMat = null;
+function paletteAverage() {
+  if (!slidePalette || !slidePalette.length) return { r: 0.78, g: 0.8, b: 0.86 };
+  const m = slidePalette.reduce((a, p) => ({ r: a.r + p.r, g: a.g + p.g, b: a.b + p.b }), { r: 0, g: 0, b: 0 });
+  return { r: m.r / slidePalette.length, g: m.g / slidePalette.length, b: m.b / slidePalette.length };
 }
 
 async function updateAmbientBackground(file) {
   if (!bgSphere || !bgTexture) return;
   if (!bgAmbientEnabled) bgSphere.enabled = false;
-  if (!bgAmbientEnabled && !memoryLaneEnabled) return;
+  if (!bgAmbientEnabled && !particlesEnabled && !mistEnabled) return;
   bgGenSession++;
   const mySession = bgGenSession;
-  const slideIdx = currentIndex;
   if (bgAmbientEnabled) {
     const vc = bgGetViewpoint();
     bgSphere.setPosition(vc.x, vc.y, vc.z);
@@ -2199,10 +1726,8 @@ async function updateAmbientBackground(file) {
       if (mySession !== bgGenSession) return;
       if (samples) samples = bgTrimCore(samples);
       if (samples) {
+        slidePalette = paletteFromSamples(samples);
         if (bgAmbientEnabled) { bgBuildTextureFromSamples(samples); ok = bgHasTexture; }
-        if (memoryLaneEnabled && !memoryThumbs[slideIdx]) {
-          try { memoryThumbs[slideIdx] = memoryThumbFromSamples(samples); } catch(e) { console.warn('thumb:', e); }
-        }
       }
     } else if (isImage(file.name)) {
       const img = await new Promise((res, rej) => {
@@ -2213,11 +1738,11 @@ async function updateAmbientBackground(file) {
         im.src = url;
       });
       if (mySession !== bgGenSession) return;
+      slidePalette = paletteFromImage(img);
       if (bgAmbientEnabled) { bgBuildTextureFromImage(img); ok = bgHasTexture; }
-      if (memoryLaneEnabled && !memoryThumbs[slideIdx]) {
-        try { memoryThumbs[slideIdx] = memoryThumbFromImage(img); } catch(e) { console.warn('thumb:', e); }
-      }
     }
+    applyBokehColors();
+    applyMistTint();
     if (bgAmbientEnabled) {
       if (!ok) console.warn('bg: ambient extraction unavailable for', file.name);
       applyBgAmbientStrength();
@@ -2252,59 +1777,114 @@ function applyHandColor() {
   });
 }
 
-// ── Particles ──────────────────────────────────────────
+// ── Bokeh lights ───────────────────────────────────────
+// Few, large, soft radial-gradient billboards with additive blending and a
+// slow pulse — "light in the air" instead of dots. Colors are inherited
+// from the slide's own palette. They never spawn or drift behind the
+// content (splats don't write depth, so geometry can't occlude them).
+
 function disposeParticles() {
   particles.forEach(p => { try { p.entity.destroy(); } catch(e){} });
   particles = [];
 }
 
-function buildParticleMaterial() {
-  const c = hexToRgb01(particleColorHex);
-  const mat = new StandardMaterial();
-  mat.emissive = new Color(c.r * particleBright, c.g * particleBright, c.b * particleBright);
-  mat.diffuse = new Color(0,0,0);
-  mat.useLighting = false;
-  mat.opacity = particleOpacity;
-  mat.blendType = BLEND_NORMAL;
-  mat.depthWrite = false;
-  mat.depthTest = particleDepthTest;
-  mat.cull = CULLFACE_NONE;
-  if ('opacityFresnel' in mat) mat.opacityFresnel = 0.7;
-  mat.update();
-  return mat;
+function createParticleTexture() {
+  if (particleTexture || !app) return;
+  const S = 64;
+  const c = document.createElement('canvas');
+  c.width = S; c.height = S;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(0.75, 'rgba(255,255,255,0.12)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, S, S);
+  particleTexture = new Texture(app.graphicsDevice, {
+    width: S, height: S, format: PIXELFORMAT_RGBA8, mipmaps: false,
+    addressU: ADDRESS_CLAMP_TO_EDGE, addressV: ADDRESS_CLAMP_TO_EDGE,
+    minFilter: FILTER_LINEAR, magFilter: FILTER_LINEAR
+  });
+  particleTexture.setSource(c);
+}
+
+function bokehViolates(x, y, z) {
+  if (!bokehBound) return false;
+  const b = bokehBound;
+  return (x - b.px) * b.nx + (y - b.py) * b.ny + (z - b.pz) * b.nz < 0.4;
 }
 
 function buildParticles() {
   if (!app) return;
   disposeParticles();
-  particleMat = buildParticleMaterial();
+  createParticleTexture();
   for (let i = 0; i < particleCount; i++) {
-    const e = new Entity();
-    e.addComponent('render', { type: 'sphere', material: particleMat });
-    const x = (Math.random() - 0.5) * 8;
-    const y = (Math.random() - 0.5) * 3 + 1.0;
-    const z = (Math.random() - 0.5) * 8;
-    e.setPosition(x, y, z);
-    e.setLocalScale(particleSize, particleSize, particleSize);
-    app.root.addChild(e);
-    const vx = (Math.random() - 0.5) * 2;
-    const vy = (Math.random() - 0.5) * 2;
-    const vz = (Math.random() - 0.5) * 2;
-    particles.push({ entity: e, vx, vy, vz });
+    const mat = new StandardMaterial();
+    mat.emissive = new Color(1, 1, 1);
+    mat.emissiveMap = particleTexture;
+    mat.opacityMap = particleTexture;
+    mat.diffuse = new Color(0, 0, 0);
+    mat.useLighting = false;
+    mat.opacity = particleOpacity;
+    mat.blendType = BLEND_ADDITIVEALPHA;
+    mat.depthWrite = false;
+    mat.depthTest = particleDepthTest;
+    mat.cull = CULLFACE_NONE;
+    mat.update();
+    const pivot = new Entity();
+    const quad = new Entity();
+    quad.addComponent('render', { type: 'plane', material: mat });
+    quad.setLocalEulerAngles(-90, 0, 0);
+    pivot.addChild(quad);
+    let x = 0, y = 1, z = 0, tries = 0;
+    do {
+      const a = Math.random() * Math.PI * 2;
+      const rr = 1.2 + Math.random() * 3.0;
+      x = Math.cos(a) * rr; z = Math.sin(a) * rr;
+      y = 0.2 + Math.random() * 2.6;
+      tries++;
+    } while (bokehViolates(x, y, z) && tries < 10);
+    pivot.setPosition(x, y, z);
+    pivot.setLocalScale(particleSize, particleSize, particleSize);
+    app.root.addChild(pivot);
+    particles.push({
+      entity: pivot, mat,
+      vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2, vz: (Math.random() - 0.5) * 2,
+      phase: Math.random() * Math.PI * 2,
+      pulse: 0.4 + Math.random() * 0.7,
+      opMul: 0.55 + Math.random() * 0.45,
+      col: { r: 1, g: 1, b: 1 }
+    });
   }
   particleRebuildNeeded = false;
+  applyBokehColors();
   setParticlesVisible(particlesEnabled);
 }
 
+function applyBokehColors() {
+  if (!particles.length) return;
+  particles.forEach((p, i) => {
+    let c;
+    if (particleInherit && slidePalette && slidePalette.length) {
+      const base = slidePalette[i % slidePalette.length];
+      const v = 0.85 + ((i * 37) % 100) / 100 * 0.3; // deterministic variety
+      c = { r: clamp01(base.r * v + 0.06), g: clamp01(base.g * v + 0.06), b: clamp01(base.b * v + 0.06) };
+    } else {
+      c = hexToRgb01(particleColorHex);
+    }
+    p.col = c;
+    p.mat.emissive = new Color(c.r * particleBright, c.g * particleBright, c.b * particleBright);
+    p.mat.opacity = particleOpacity * p.opMul * particleVisFactor;
+    p.mat.update();
+  });
+}
+
 function applyParticleSize() {
-  particles.forEach(p => { if (p.entity) p.entity.setLocalScale(particleSize, particleSize, particleSize); });
+  // live size is driven by the pulse in updateParticles; nothing to do here
 }
 function applyParticleAppearance() {
-  if (!particleMat) return;
-  const c = hexToRgb01(particleColorHex);
-  particleMat.emissive = new Color(c.r * particleBright, c.g * particleBright, c.b * particleBright);
-  particleMat.opacity = particleOpacity;
-  particleMat.update();
+  applyBokehColors();
 }
 function setParticlesVisible(v) {
   particles.forEach(p => { if (p.entity) p.entity.enabled = v; });
@@ -2318,14 +1898,13 @@ function updateParticles(dt) {
   let visibilityFactor = 1;
   if (particleVisibility === 'fade-only') visibilityFactor = fadeOpacity > 0.1 ? 1 : 0;
   else if (particleVisibility === 'fade-linked') visibilityFactor = 0.3 + fadeOpacity * 0.7;
-
-  if (particleMat) {
-    const c = hexToRgb01(particleColorHex);
-    const b = particleBright * visibilityFactor;
-    particleMat.emissive = new Color(c.r * b, c.g * b, c.b * b);
-    particleMat.update();
+  if (Math.abs(visibilityFactor - particleVisFactor) > 0.02) {
+    particleVisFactor = visibilityFactor;
+    particles.forEach(p => { p.mat.opacity = particleOpacity * p.opMul * particleVisFactor; p.mat.update(); });
   }
 
+  const camPos = cameraEntity ? cameraEntity.getPosition() : null;
+  const tNow = performance.now() / 1000;
   const speed = particleSpeed * 0.3;
   particles.forEach(p => {
     const pos = p.entity.getPosition();
@@ -2333,23 +1912,139 @@ function updateParticles(dt) {
     if (particleMotion === 'drift') {
       nx += p.vx * speed * dt; ny += p.vy * speed * dt; nz += p.vz * speed * dt;
       if (nx > 4 || nx < -4) p.vx *= -1;
-      if (ny > 4 || ny < -1.5) p.vy *= -1;
+      if (ny > 3 || ny < 0.1) p.vy *= -1;
       if (nz > 4 || nz < -4) p.vz *= -1;
     } else if (particleMotion === 'fall') {
       ny -= speed * dt; nx += p.vx * speed * 0.3 * dt;
-      if (ny < -1.5) ny += 5;
+      if (ny < 0.1) ny += 3;
     } else if (particleMotion === 'radial') {
       const cx = nx, cy = ny - 1.0, cz = nz;
-      const len = Math.sqrt(cx*cx + cy*cy + cz*cz) || 0.01;
+      const len = Math.sqrt(cx * cx + cy * cy + cz * cz) || 0.01;
       const factor = speed * dt / Math.max(0.5, len);
       nx += cx * factor; ny += cy * factor; nz += cz * factor;
-      if (Math.sqrt(cx*cx + cy*cy + cz*cz) > 6) {
+      if (Math.sqrt(cx * cx + cy * cy + cz * cz) > 6) {
         const r = 0.3;
         nx = (Math.random() - 0.5) * r; ny = 1.0 + (Math.random() - 0.5) * r; nz = (Math.random() - 0.5) * r;
       }
     }
+    // Never drift behind the content
+    if (bokehBound) {
+      const b = bokehBound;
+      const d = (nx - b.px) * b.nx + (ny - b.py) * b.ny + (nz - b.pz) * b.nz;
+      if (d < 0.4) {
+        const push = 0.4 - d;
+        nx += b.nx * push; ny += b.ny * push; nz += b.nz * push;
+        const vd = p.vx * b.nx + p.vy * b.ny + p.vz * b.nz;
+        if (vd < 0) { p.vx -= 2 * vd * b.nx; p.vy -= 2 * vd * b.ny; p.vz -= 2 * vd * b.nz; }
+      }
+    }
     p.entity.setPosition(nx, ny, nz);
+    // Slow breathing pulse + camera-facing billboard
+    const sc = particleSize * (0.8 + 0.25 * Math.sin(tNow * p.pulse + p.phase));
+    p.entity.setLocalScale(sc, sc, sc);
+    if (camPos) p.entity.lookAt(camPos.x, camPos.y, camPos.z);
   });
+}
+
+// ── Ground mist ────────────────────────────────────────
+// Thin layers of softly drifting fog at the floor — the photos float above
+// a quiet sea of mist tinted with the slide's colors.
+
+function createMistTexture() {
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = S; c.height = S;
+  const ctx = c.getContext('2d');
+  for (let i = 0; i < 7; i++) {
+    const bx = S * (0.2 + Math.random() * 0.6), by = S * (0.2 + Math.random() * 0.6);
+    const br = S * (0.18 + Math.random() * 0.25);
+    const g = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+    g.addColorStop(0, 'rgba(255,255,255,0.55)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, S, S);
+  }
+  // fade edges so the plane border is invisible
+  const img = ctx.getImageData(0, 0, S, S);
+  for (let v = 0; v < S; v++) {
+    for (let u = 0; u < S; u++) {
+      const du = (u / (S - 1)) * 2 - 1, dv = (v / (S - 1)) * 2 - 1;
+      const edge = clamp01(1.6 * (1 - Math.sqrt(du * du + dv * dv)));
+      img.data[(v * S + u) * 4 + 3] = Math.round(img.data[(v * S + u) * 4 + 3] * edge);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+function buildMist() {
+  if (!app || mistLayers.length) return;
+  const layerDefs = [
+    { y: 0.06, scale: 9,  mul: 1.0, rot: 0.5 },
+    { y: 0.22, scale: 12, mul: 0.7, rot: -0.32 },
+    { y: 0.42, scale: 15, mul: 0.45, rot: 0.2 }
+  ];
+  for (const def of layerDefs) {
+    try {
+      const canvas = createMistTexture();
+      const tex = new Texture(app.graphicsDevice, {
+        width: canvas.width, height: canvas.height, format: PIXELFORMAT_RGBA8, mipmaps: false,
+        addressU: ADDRESS_CLAMP_TO_EDGE, addressV: ADDRESS_CLAMP_TO_EDGE,
+        minFilter: FILTER_LINEAR, magFilter: FILTER_LINEAR
+      });
+      tex.setSource(canvas);
+      const mat = new StandardMaterial();
+      mat.emissive = new Color(0.75, 0.78, 0.85);
+      mat.emissiveMap = tex;
+      mat.opacityMap = tex;
+      mat.diffuse = new Color(0, 0, 0);
+      mat.useLighting = false;
+      mat.opacity = mistOpacity * def.mul;
+      mat.blendType = BLEND_NORMAL;
+      mat.depthWrite = false;
+      mat.cull = CULLFACE_NONE;
+      mat.update();
+      const e = new Entity('mist');
+      e.addComponent('render', { type: 'plane', material: mat });
+      e.setPosition((Math.random() - 0.5) * 2, def.y, (Math.random() - 0.5) * 2);
+      e.setLocalScale(def.scale, 1, def.scale);
+      e.setLocalEulerAngles(0, Math.random() * 360, 0);
+      app.root.addChild(e);
+      mistLayers.push({ entity: e, mat, mul: def.mul, rot: def.rot, baseY: def.y, phase: Math.random() * Math.PI * 2 });
+    } catch(e) { console.warn('mist layer failed:', e); }
+  }
+  applyMistTint();
+}
+
+function applyMistTint() {
+  if (!mistLayers.length) return;
+  const avg = paletteAverage();
+  const mix = (a, b, t) => a * (1 - t) + b * t;
+  const tint = {
+    r: mix(0.75, clamp01(avg.r + 0.18), 0.45),
+    g: mix(0.78, clamp01(avg.g + 0.18), 0.45),
+    b: mix(0.85, clamp01(avg.b + 0.18), 0.45)
+  };
+  mistLayers.forEach(l => {
+    l.mat.emissive = new Color(tint.r, tint.g, tint.b);
+    l.mat.opacity = mistOpacity * l.mul;
+    l.mat.update();
+  });
+}
+
+function updateMist(dt) {
+  if (!mistEnabled || !mistLayers.length) return;
+  const t = performance.now() / 1000;
+  mistLayers.forEach(l => {
+    l.entity.rotate(0, l.rot * dt, 0);
+    const p = l.entity.getPosition();
+    l.entity.setPosition(p.x, l.baseY + Math.sin(t * 0.15 + l.phase) * 0.03, p.z);
+  });
+}
+
+function disposeMist() {
+  mistLayers.forEach(l => { try { l.entity.destroy(); } catch(e){} });
+  mistLayers = [];
 }
 
 // ── Hand tracking ──────────────────────────────────────
@@ -2466,10 +2161,10 @@ function initApp() {
     updateFade(dt);
     updateAnim(dt);
     updateParticles(dt);
+    updateMist(dt);
     updateHands();
     updateControllerButtons(dt);
     updateEndFade(dt);
-    updateMemoryLane(dt);
     // Debug display
     const dr = document.getElementById('debug-repeat');
     const da = document.getElementById('debug-audio');
@@ -2649,10 +2344,7 @@ function setupXR() {
       if (!inVR) return;
       if (handTrackingActive) return;
       if (inputSource && inputSource.hand) return;
-      if (!isRunning) {
-        if (memoryActive) { memoryRequestFinale(); return; }
-        startSlideshowVR(); return;
-      }
+      if (!isRunning) { startSlideshowVR(); return; }
       if (isLoading) return;
       // Left trigger: previous, Right trigger: next
       const handedness = inputSource.handedness;
@@ -2929,7 +2621,6 @@ function autoFrameCamera() {
 async function enterVRSetup() {
   readCfg();
   disposeEndText();
-  disposeMemoryLane();
   if (!app) {
     initApp();
     // Wait for app.xr to be available (XRManager initializes after app.start())
@@ -2943,6 +2634,7 @@ async function enterVRSetup() {
   }
   if (!app.xr?.supported) {showToast('VR非対応'); return;}
   if (particlesEnabled) buildParticles();
+  if (mistEnabled) buildMist();
   ensureHandModels().catch(e => console.warn('hand models:', e));
 
   // Initialize AudioContext immediately (needs user gesture)
@@ -2972,7 +2664,6 @@ async function enterVRSetup() {
 }
 
 async function startSlideshowVR() {
-  disposeMemoryLane();
   isRunning = true; isPaused = false;
   startAudio();
   // If auto-interval is on, wait startLag seconds before showing first slide
@@ -3006,15 +2697,11 @@ function scheduleNext() {
       showToast(`END sequence: showEnd=${showEnd} isLast=${isLast}`, 'info');
       await fadeTo(1, fadeTimeMs);
       disposeCurrentSplat();
-      if (memoryLaneEnabled) createMemoryLane();
       if (showEnd) {
         createEndText();
         showToast(`createEndText done: entity=${endTextEntity?'YES':'NO'}`, 'info');
-      }
-      if (showEnd || (memoryLaneEnabled && memoryGroup)) {
         await fadeTo(0, fadeTimeMs);
-        if (memoryGroup) startMemoryLane(); // END text appears after the finale
-        else if (showEnd) showEndText();
+        showEndText();
       }
       isRunning = false;
       progressBarEl.style.width = '0%';
@@ -3064,7 +2751,6 @@ async function restartSlideshow() {
   // Dispose current splat and END text
   disposeCurrentSplat();
   disposeEndText();
-  disposeMemoryLane();
   // Reset state
   currentIndex = -1;
   animProgress = 0;
@@ -3097,11 +2783,10 @@ function endSlideshow() {
   audioIndex = 0;
   musicEnded = false;
   if (app?.xr?.active) {try{app.xr.end();}catch(e){}}
-  disposeParticles(); particleMat = null;
+  disposeParticles(); particleTexture = null;
+  disposeMist();
   disposeHandModels();
   disposeEndText();
-  disposeMemoryLane();
-  memoryThumbs = [];
   disposeCurrentSplat();
   if (app) {try{app.destroy();}catch(e){} app=null;}
   viewerContainerEl.innerHTML = '';
@@ -3175,14 +2860,17 @@ $('download-config-btn').addEventListener('click', () => {
       color: $('p-color').value,
       motion: $('p-motion').value,
       visibility: $('p-visibility').value,
-      depthTest: $('p-depth-test').checked
+      depthTest: $('p-depth-test').checked,
+      inherit: $('p-inherit').checked
+    },
+    mist: {
+      enabled: $('mist-enabled').checked,
+      opacity: parseFloat($('mist-opacity').value)
     },
     repeat: {
       model: $('repeat-model').checked,
       music: $('repeat-music').checked,
       showEnd: $('show-end').checked,
-      memoryLane: $('memory-lane').checked,
-      memoryChime: $('memory-chime').checked,
       endColor: $('end-color').value,
       endOffsetX: parseFloat($('end-ox').value),
       endOffsetY: parseFloat($('end-oy').value),
