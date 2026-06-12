@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v4.3</span>
+      <span class="version">v4.5</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -334,8 +334,8 @@
         <div class="settings-grid" id="bg-ambient-settings" style="margin-top:14px">
           <div class="s-row">
             <span class="s-key">明るさ</span>
-            <input type="range" id="bg-strength" min="0.05" max="1" step="0.05" value="0.5">
-            <span class="s-val" id="vbg-strength">0.50</span>
+            <input type="range" id="bg-strength" min="0.05" max="2" step="0.05" value="0.8">
+            <span class="s-val" id="vbg-strength">0.80</span>
           </div>
           <div class="s-row">
             <span class="s-key">ぼかし</span>
@@ -556,7 +556,7 @@ let handColorHex = '#000000';
 
 // Ambient background (v4.0: extend splat edge colors into space)
 let bgAmbientEnabled = true;
-let bgAmbientStrength = 0.5;
+let bgAmbientStrength = 0.8;
 let bgAmbientSoft = 2;
 let bgAmbientFalloff = 0;
 let bgSphere = null, bgSphereMat = null, bgTexture = null;
@@ -570,7 +570,7 @@ let memoryLaneEnabled = true;
 let memoryThumbs = [];          // per-slide-index thumbnail canvases (CPU)
 let memoryGroup = null, memoryPanels = [];
 let memoryActive = false, memoryStartAt = 0;
-const MEMORY_THUMB_S = 128, MEMORY_RADIUS = 3.2, MEMORY_MAX_PANELS = 48;
+const MEMORY_THUMB_S = 160, MEMORY_RADIUS = 3.2, MEMORY_MAX_PANELS = 48;
 
 // Particles
 let particles = [];
@@ -1197,6 +1197,18 @@ function applyBgColor() {
 // whole sky sphere. Pure CPU at load time — no dependence on render
 // timing, so it works identically in and out of XR.
 
+function bgGetViewpoint() {
+  // Use the real camera (= headset pose in VR) at generation time so the
+  // halo lines up behind the content for the actual eye height/position
+  if (cameraEntity) {
+    try {
+      const p = cameraEntity.getPosition();
+      if (p && isFinite(p.x) && isFinite(p.y) && isFinite(p.z)) return { x: p.x, y: p.y, z: p.z };
+    } catch(e){}
+  }
+  return BG_VIEWPOINT;
+}
+
 function createBgSphere() {
   if (!app || bgSphere) return;
   try {
@@ -1243,6 +1255,29 @@ function applyBgAmbientVisibility() {
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const SH_C0 = 0.28209479177387814;
 
+// Trim samples to the dense core: photo-relief splats often carry floor
+// sweeps, skirts, or stray floaters far outside the visible content, which
+// drag the projected halo away from where the splat appears. Keep only
+// samples within median +- 2.2x the robust spread per axis. Safety: if that
+// would discard more than 70% of samples, keep everything.
+function bgTrimCore(samples) {
+  if (!samples || samples.length < 500) return samples;
+  const lo = {}, hi = {};
+  for (const ax of ['x', 'y', 'z']) {
+    const arr = samples.map(p => p[ax]).sort((a, b) => a - b);
+    const pick = q => arr[Math.floor(q * (arr.length - 1))];
+    // Tukey fences: robust even when sweeps/floaters are >10% of the mass
+    const q1 = pick(0.25), q3 = pick(0.75);
+    const iqr = Math.max(q3 - q1, 1e-6);
+    lo[ax] = q1 - 1.5 * iqr; hi[ax] = q3 + 1.5 * iqr;
+  }
+  const out = samples.filter(p =>
+    p.x >= lo.x && p.x <= hi.x &&
+    p.y >= lo.y && p.y <= hi.y &&
+    p.z >= lo.z && p.z <= hi.z);
+  return out.length >= samples.length * 0.3 ? out : samples;
+}
+
 // PLY (standard 3DGS export: binary little endian, x/y/z + f_dc_0..2)
 async function bgSamplesFromPLY(file) {
   if (file.size > 250 * 1024 * 1024) return null; // memory guard for Quest
@@ -1277,16 +1312,18 @@ async function bgSamplesFromPLY(file) {
   const dv = new DataView(buf, headerEnd);
   const rd = (o, t) => (t === 'double' || t === 'float64') ? dv.getFloat64(o, true) : dv.getFloat32(o, true);
   const hasOp = !!offs.opacity;
-  const step = Math.max(1, Math.floor(count / 16000));
+  const step = Math.max(1, Math.floor(count / 60000));
   const out = [];
   for (let i = 0; i < count; i += step) {
     const base = i * stride;
     if (base + stride > dv.byteLength) break;
+    let op = 1;
     if (hasOp) {
-      const op = 1 / (1 + Math.exp(-rd(base + offs.opacity.off, offs.opacity.type)));
-      if (op < 0.2) continue; // skip near-transparent floaters
+      op = 1 / (1 + Math.exp(-rd(base + offs.opacity.off, offs.opacity.type)));
+      if (op < 0.08) continue; // skip only near-invisible floaters
     }
     out.push({
+      o: op,
       x: rd(base + offs.x.off, offs.x.type),
       y: rd(base + offs.y.off, offs.y.type),
       z: rd(base + offs.z.off, offs.z.type),
@@ -1334,16 +1371,18 @@ async function bgSamplesFromSOG(file) {
   const cb = meta.sh0.codebook;
   const mins = meta.means.mins, maxs = meta.means.maxs;
   const invLog = v => Math.sign(v) * (Math.exp(Math.abs(v)) - 1);
-  const step = Math.max(1, Math.floor(count / 16000));
+  const step = Math.max(1, Math.floor(count / 60000));
   const out = [];
   for (let i = 0; i < count; i += step) {
     const p = i * 4;
     if (p + 3 >= sh0.length || p + 2 >= ml.length || p + 2 >= mu.length) break;
-    if (sh0[p + 3] / 255 < 0.2) continue; // alpha = opacity (direct)
+    const op = sh0[p + 3] / 255;
+    if (op < 0.08) continue; // alpha = opacity (direct)
     const lx = mins[0] + (((mu[p] << 8) | ml[p]) / 65535) * (maxs[0] - mins[0]);
     const ly = mins[1] + (((mu[p + 1] << 8) | ml[p + 1]) / 65535) * (maxs[1] - mins[1]);
     const lz = mins[2] + (((mu[p + 2] << 8) | ml[p + 2]) / 65535) * (maxs[2] - mins[2]);
     out.push({
+      o: op,
       x: invLog(lx), y: invLog(ly), z: invLog(lz),
       r: clamp01(0.5 + SH_C0 * cb[sh0[p]]),
       g: clamp01(0.5 + SH_C0 * cb[sh0[p + 1]]),
@@ -1374,14 +1413,18 @@ function bgDirToTexel(dx, dy, dz) {
 function bgBuildTextureFromSamples(samples) {
   const N = BG_EQ_W * BG_EQ_H;
   const sr = new Float32Array(N), sg = new Float32Array(N), sb = new Float32Array(N), cnt = new Float32Array(N);
-  // splat entity transform: rotX(180) then translate to basePos
+  // splat entity transform: rotX(180) then translate to the entity's
+  // actual position (includes anim start offsets)
+  const ent = currentSplatEntity ? currentSplatEntity.getPosition() : basePos;
+  const vp = bgGetViewpoint();
   for (const s of samples) {
-    const wx = basePos.x + s.x;
-    const wy = basePos.y - s.y;
-    const wz = basePos.z - s.z;
-    const idx = bgDirToTexel(wx - BG_VIEWPOINT.x, wy - BG_VIEWPOINT.y, wz - BG_VIEWPOINT.z);
+    const wx = ent.x + s.x;
+    const wy = ent.y - s.y;
+    const wz = ent.z - s.z;
+    const idx = bgDirToTexel(wx - vp.x, wy - vp.y, wz - vp.z);
     if (idx === null) continue;
-    sr[idx] += s.r; sg[idx] += s.g; sb[idx] += s.b; cnt[idx]++;
+    const w = s.o !== undefined ? s.o : 1; // opacity = visual contribution
+    sr[idx] += s.r * w; sg[idx] += s.g * w; sb[idx] += s.b * w; cnt[idx] += w;
   }
   bgFinishTexture(sr, sg, sb, cnt);
 }
@@ -1398,7 +1441,9 @@ function bgBuildTextureFromImage(img) {
   sctx.drawImage(img, 0, 0, SW, SH2);
   const px = sctx.getImageData(0, 0, SW, SH2).data;
   // direction toward the photo (falls back to forward if too close)
-  let cx = basePos.x - BG_VIEWPOINT.x, cy = basePos.y - BG_VIEWPOINT.y, cz = basePos.z - BG_VIEWPOINT.z;
+  const entI = currentSplatEntity ? currentSplatEntity.getPosition() : basePos;
+  const vpI = bgGetViewpoint();
+  let cx = entI.x - vpI.x, cy = entI.y - vpI.y, cz = entI.z - vpI.z;
   if (Math.sqrt(cx * cx + cy * cy + cz * cz) < 0.7) { cx = 0; cy = 0; cz = -1; }
   const cYaw = Math.atan2(cx, -cz);
   const cLen = Math.sqrt(cx * cx + cy * cy + cz * cz);
@@ -1426,7 +1471,7 @@ function bgFinishTexture(sr, sg, sb, cnt) {
   const filled = new Uint8Array(N);
   let filledCount = 0;
   for (let i = 0; i < N; i++) {
-    if (cnt[i] > 0) {
+    if (cnt[i] > 0.3) { // ignore texels claimed only by faint floaters
       r[i] = sr[i] / cnt[i]; g[i] = sg[i] / cnt[i]; b[i] = sb[i] / cnt[i];
       filled[i] = 1; filledCount++;
     }
@@ -1601,16 +1646,31 @@ function memoryThumbFromSamples(samples) {
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   const half = Math.max(x1 - x0, y1 - y0) / 2 * 1.08 || 1;
   const sr = new Float32Array(N), sg = new Float32Array(N), sb = new Float32Array(N), cnt = new Float32Array(N);
+  // Bilinear 2x2 footprint per sample: soft splats instead of single-pixel
+  // dots, which is what made the thumbnails noisy
   for (const p of samples) {
-    const u = Math.floor(((p.x - cx) / half * 0.5 + 0.5) * S);
-    const v = Math.floor((0.5 - (-p.y - cy) / half * 0.5) * S); // row 0 = top
-    if (u < 0 || u >= S || v < 0 || v >= S) continue;
-    const i = v * S + u;
-    sr[i] += p.r; sg[i] += p.g; sb[i] += p.b; cnt[i]++;
+    const ow = p.o !== undefined ? p.o : 1;
+    const fu = ((p.x - cx) / half * 0.5 + 0.5) * S - 0.5;
+    const fv = (0.5 - (-p.y - cy) / half * 0.5) * S - 0.5; // row 0 = top
+    const u0 = Math.floor(fu), v0 = Math.floor(fv);
+    const tu = fu - u0, tv = fv - v0;
+    for (let dv = 0; dv <= 1; dv++) {
+      const v = v0 + dv;
+      if (v < 0 || v >= S) continue;
+      const wv = dv ? tv : 1 - tv;
+      for (let du = 0; du <= 1; du++) {
+        const u = u0 + du;
+        if (u < 0 || u >= S) continue;
+        const w = wv * (du ? tu : 1 - tu) * ow;
+        if (w <= 0) continue;
+        const i = v * S + u;
+        sr[i] += p.r * w; sg[i] += p.g * w; sb[i] += p.b * w; cnt[i] += w;
+      }
+    }
   }
   const r = new Float32Array(N), g = new Float32Array(N), b = new Float32Array(N), a = new Float32Array(N);
   for (let i = 0; i < N; i++) {
-    if (cnt[i] > 0) { r[i] = sr[i] / cnt[i]; g[i] = sg[i] / cnt[i]; b[i] = sb[i] / cnt[i]; a[i] = 1; }
+    if (cnt[i] > 0.18) { r[i] = sr[i] / cnt[i]; g[i] = sg[i] / cnt[i]; b[i] = sb[i] / cnt[i]; a[i] = 1; }
   }
   // Fill interior pinholes only (needs 2+ filled neighbors) so the
   // silhouette edge stays crisp and the padding stays transparent
@@ -1629,6 +1689,30 @@ function memoryThumbFromSamples(samples) {
       }
     }
     a.set(na); r.set(nr); g.set(ng); b.set(nb);
+  }
+  // One alpha-aware 3x3 smoothing pass on RGB (denoise without bleeding
+  // colors past the silhouette)
+  {
+    const nr = r.slice(), ng = g.slice(), nb = b.slice();
+    for (let v = 0; v < S; v++) {
+      for (let u = 0; u < S; u++) {
+        const i = v * S + u;
+        if (a[i] === 0) continue;
+        let ar = 0, ag = 0, ab = 0, n = 0;
+        for (let dv = -1; dv <= 1; dv++) {
+          const vv = v + dv;
+          if (vv < 0 || vv >= S) continue;
+          for (let du = -1; du <= 1; du++) {
+            const uu = u + du;
+            if (uu < 0 || uu >= S) continue;
+            const j = vv * S + uu;
+            if (a[j] > 0) { ar += r[j]; ag += g[j]; ab += b[j]; n++; }
+          }
+        }
+        nr[i] = ar / n; ng[i] = ag / n; nb[i] = ab / n;
+      }
+    }
+    r.set(nr); g.set(ng); b.set(nb);
   }
   // Write rows flipped vertically (END-text recipe: plane shows the canvas
   // upside down, so we pre-flip)
@@ -1758,13 +1842,18 @@ async function updateAmbientBackground(file) {
   bgGenSession++;
   const mySession = bgGenSession;
   const slideIdx = currentIndex;
+  if (bgAmbientEnabled) {
+    const vc = bgGetViewpoint();
+    bgSphere.setPosition(vc.x, vc.y, vc.z);
+  }
   try {
     let ok = false;
     if (/\.ply$/i.test(file.name) || /\.sog$/i.test(file.name)) {
-      const samples = /\.ply$/i.test(file.name)
+      let samples = /\.ply$/i.test(file.name)
         ? await bgSamplesFromPLY(file)
         : await bgSamplesFromSOG(file);
       if (mySession !== bgGenSession) return;
+      if (samples) samples = bgTrimCore(samples);
       if (samples) {
         if (bgAmbientEnabled) { bgBuildTextureFromSamples(samples); ok = bgHasTexture; }
         if (memoryLaneEnabled && !memoryThumbs[slideIdx]) {
