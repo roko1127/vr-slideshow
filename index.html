@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v4.5</span>
+      <span class="version">v4.6</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -424,6 +424,7 @@
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
         <label class="check-label"><input type="checkbox" id="show-end" checked> END表示</label>
         <label class="check-label"><input type="checkbox" id="memory-lane" checked> 走馬灯</label>
+        <label class="check-label"><input type="checkbox" id="memory-chime" checked> チャイム</label>
       </div>
       <div class="settings-grid" id="end-settings">
         <div class="s-row">
@@ -451,7 +452,9 @@
         3DモデルOFF: 最後のスライド後に暗転停止<br>
         音楽OFF: 最後の曲が終わったら停止<br>
         END表示: リピートOFF時に最後に「END」を表示<br>
-        走馬灯: 最後に全スライドが光のパネルになって周囲に浮かぶ
+        走馬灯: 最後に全スライドが光の螺旋になって周囲に浮かぶ<br>
+        　見つめたパネルは明るくなって近づく / トリガーでフィナーレへ<br>
+        チャイム: 走馬灯で光が灯る瞬間の小さな鈴の音
       </p>
     </div>
 
@@ -565,12 +568,17 @@ let bgGenSession = 0;
 const BG_EQ_W = 256, BG_EQ_H = 128;
 const BG_VIEWPOINT = { x: 0, y: 1.6, z: 0 };
 
-// Memory lane (v4.3: all slides surround the viewer at the end)
+// Memory lane 2.0 (chronological spiral of gazing-responsive holograms)
 let memoryLaneEnabled = true;
-let memoryThumbs = [];          // per-slide-index thumbnail canvases (CPU)
+let memoryChimeEnabled = true;
+let memoryThumbs = [];          // per-slide-index {sharp, blur, avg} (CPU)
 let memoryGroup = null, memoryPanels = [];
 let memoryActive = false, memoryStartAt = 0;
-const MEMORY_THUMB_S = 160, MEMORY_RADIUS = 3.2, MEMORY_MAX_PANELS = 48;
+let memoryPhase = 'idle', memoryFloatAt = 0, memoryConvergeAt = 0;
+let memoryFinaleRequested = false, memoryGroupYaw = 0;
+let memoryOrb = null, memoryOrbMat = null;
+let memoryPrevParticleBright = null;
+const MEMORY_THUMB_S = 160, MEMORY_MAX_PANELS = 48;
 
 // Particles
 let particles = [];
@@ -744,6 +752,9 @@ function initUI() {
   $('memory-lane').addEventListener('change', e => {
     memoryLaneEnabled = e.target.checked;
   });
+  $('memory-chime').addEventListener('change', e => {
+    memoryChimeEnabled = e.target.checked;
+  });
 
   $('show-end').addEventListener('change', e => {
     showEnd = e.target.checked;
@@ -821,6 +832,7 @@ function readCfg() {
   bgAmbientSoft = Math.round(parseFloat($('bg-soft').value));
   bgAmbientFalloff = parseFloat($('bg-falloff').value);
   memoryLaneEnabled = $('memory-lane').checked;
+  memoryChimeEnabled = $('memory-chime').checked;
 }
 
 // ── Splat transform ────────────────────────────────────
@@ -1095,6 +1107,7 @@ function applyConfigFromJson(cfg) {
     setCheckbox('repeat-music',cfg.repeat.music);
     setCheckbox('show-end',cfg.repeat.showEnd);
     setCheckbox('memory-lane',cfg.repeat.memoryLane);
+    setCheckbox('memory-chime',cfg.repeat.memoryChime);
     if (cfg.repeat.endColor) setColorVal('end-color','vend-color',cfg.repeat.endColor);
     setSliderVal('end-ox',cfg.repeat.endOffsetX);
     setSliderVal('end-oy',cfg.repeat.endOffsetY);
@@ -1630,12 +1643,124 @@ function bgFinishTexture(sr, sg, sb, cnt) {
   return true;
 }
 
-// ── Memory lane (v4.3) ─────────────────────────────────
-// While each slide loads we already extract position+color samples for the
-// ambient background. The same samples, projected front-on into a small
-// canvas, make an impressionistic glowing thumbnail of the slide — cached
-// per slide on the CPU. At the END sequence every thumbnail becomes a
-// floating panel arranged in a ring around the viewer.
+// ── Memory lane 2.0 (v4.6) ─────────────────────────────
+// Memories rise as a chronological spiral of glowing holograms. Each one
+// ignites as a blurred blob of light that slowly comes into focus (the act
+// of remembering). The panel you gaze at brightens and drifts closer. After
+// floating a while (or on trigger) the spiral unwinds and every light
+// converges into a single orb — then END.
+
+const BLEND_ADDITIVEALPHA = 6; // measured from playcanvas 2.18.1
+const MEMORY_FLOAT_SECONDS = 30;
+
+function memoryAvgFromArrays(r, g, b, a, N) {
+  let ar = 0, ag = 0, ab = 0, n = 0;
+  for (let i = 0; i < N; i++) if (a[i] > 0.5) { ar += r[i]; ag += g[i]; ab += b[i]; n++; }
+  if (!n) return { r: 0.5, g: 0.5, b: 0.5 };
+  return { r: ar / n, g: ag / n, b: ab / n };
+}
+
+function memoryCanvasesFromArrays(r, g, b, a, S) {
+  const N = S * S;
+  // Soft edge: feather the alpha outward 2 passes, after first dilating the
+  // colors outward so the feathered rim has a color to show
+  const cr = r.slice(), cg = g.slice(), cb = b.slice();
+  const solid = new Uint8Array(N);
+  for (let i = 0; i < N; i++) solid[i] = a[i] > 0.5 ? 1 : 0;
+  for (let pass = 0; pass < 3; pass++) {
+    const ns = solid.slice();
+    for (let v = 0; v < S; v++) {
+      for (let u = 0; u < S; u++) {
+        const i = v * S + u;
+        if (solid[i]) continue;
+        let ar = 0, ag = 0, ab = 0, n = 0;
+        if (u > 0 && solid[i - 1]) { ar += cr[i - 1]; ag += cg[i - 1]; ab += cb[i - 1]; n++; }
+        if (u < S - 1 && solid[i + 1]) { ar += cr[i + 1]; ag += cg[i + 1]; ab += cb[i + 1]; n++; }
+        if (v > 0 && solid[i - S]) { ar += cr[i - S]; ag += cg[i - S]; ab += cb[i - S]; n++; }
+        if (v < S - 1 && solid[i + S]) { ar += cr[i + S]; ag += cg[i + S]; ab += cb[i + S]; n++; }
+        if (n) { cr[i] = ar / n; cg[i] = ag / n; cb[i] = ab / n; ns[i] = 1; }
+      }
+    }
+    solid.set(ns);
+  }
+  let fa = Float32Array.from(a);
+  for (let pass = 0; pass < 2; pass++) {
+    const na = new Float32Array(N);
+    for (let v = 0; v < S; v++) {
+      for (let u = 0; u < S; u++) {
+        let sum = 0, n = 0;
+        for (let dv = -1; dv <= 1; dv++) {
+          const vv = v + dv;
+          if (vv < 0 || vv >= S) continue;
+          for (let du = -1; du <= 1; du++) {
+            const uu = u + du;
+            if (uu < 0 || uu >= S) continue;
+            sum += fa[vv * S + uu]; n++;
+          }
+        }
+        na[v * S + u] = sum / n;
+      }
+    }
+    fa = na;
+  }
+  // Sharp canvas (rows pre-flipped: END-text recipe)
+  const sharp = document.createElement('canvas');
+  sharp.width = S; sharp.height = S;
+  const sctx = sharp.getContext('2d');
+  const simg = sctx.createImageData(S, S);
+  for (let v = 0; v < S; v++) {
+    const src = v * S, dst = (S - 1 - v) * S;
+    for (let u = 0; u < S; u++) {
+      const i = src + u, o = (dst + u) * 4;
+      simg.data[o] = Math.round(clamp01(cr[i]) * 255);
+      simg.data[o + 1] = Math.round(clamp01(cg[i]) * 255);
+      simg.data[o + 2] = Math.round(clamp01(cb[i]) * 255);
+      simg.data[o + 3] = Math.round(clamp01(fa[i]) * 235);
+    }
+  }
+  sctx.putImageData(simg, 0, 0);
+  // Glow canvas: premultiplied + heavily blurred + brightened. RGB outside
+  // fades to black so additive blending adds nothing there.
+  let pr = new Float32Array(N), pg = new Float32Array(N), pb = new Float32Array(N);
+  for (let i = 0; i < N; i++) { pr[i] = cr[i] * fa[i]; pg[i] = cg[i] * fa[i]; pb[i] = cb[i] * fa[i]; }
+  for (let pass = 0; pass < 8; pass++) {
+    const nr = new Float32Array(N), ng = new Float32Array(N), nb = new Float32Array(N);
+    for (let v = 0; v < S; v++) {
+      for (let u = 0; u < S; u++) {
+        let ar = 0, ag = 0, ab = 0, n = 0;
+        for (let dv = -1; dv <= 1; dv++) {
+          const vv = v + dv;
+          if (vv < 0 || vv >= S) continue;
+          for (let du = -1; du <= 1; du++) {
+            const uu = u + du;
+            if (uu < 0 || uu >= S) continue;
+            const j = vv * S + uu;
+            ar += pr[j]; ag += pg[j]; ab += pb[j]; n++;
+          }
+        }
+        const i = v * S + u;
+        nr[i] = ar / n; ng[i] = ag / n; nb[i] = ab / n;
+      }
+    }
+    pr = nr; pg = ng; pb = nb;
+  }
+  const blur = document.createElement('canvas');
+  blur.width = S; blur.height = S;
+  const bctx = blur.getContext('2d');
+  const bimg = bctx.createImageData(S, S);
+  for (let v = 0; v < S; v++) {
+    const src = v * S, dst = (S - 1 - v) * S;
+    for (let u = 0; u < S; u++) {
+      const i = src + u, o = (dst + u) * 4;
+      bimg.data[o] = Math.round(clamp01(pr[i] * 1.25) * 255);
+      bimg.data[o + 1] = Math.round(clamp01(pg[i] * 1.25) * 255);
+      bimg.data[o + 2] = Math.round(clamp01(pb[i] * 1.25) * 255);
+      bimg.data[o + 3] = 255;
+    }
+  }
+  bctx.putImageData(bimg, 0, 0);
+  return { sharp, blur, avg: memoryAvgFromArrays(cr, cg, cb, fa, N) };
+}
 
 function memoryThumbFromSamples(samples) {
   const S = MEMORY_THUMB_S, N = S * S;
@@ -1646,8 +1771,6 @@ function memoryThumbFromSamples(samples) {
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   const half = Math.max(x1 - x0, y1 - y0) / 2 * 1.08 || 1;
   const sr = new Float32Array(N), sg = new Float32Array(N), sb = new Float32Array(N), cnt = new Float32Array(N);
-  // Bilinear 2x2 footprint per sample: soft splats instead of single-pixel
-  // dots, which is what made the thumbnails noisy
   for (const p of samples) {
     const ow = p.o !== undefined ? p.o : 1;
     const fu = ((p.x - cx) / half * 0.5 + 0.5) * S - 0.5;
@@ -1672,8 +1795,6 @@ function memoryThumbFromSamples(samples) {
   for (let i = 0; i < N; i++) {
     if (cnt[i] > 0.18) { r[i] = sr[i] / cnt[i]; g[i] = sg[i] / cnt[i]; b[i] = sb[i] / cnt[i]; a[i] = 1; }
   }
-  // Fill interior pinholes only (needs 2+ filled neighbors) so the
-  // silhouette edge stays crisp and the padding stays transparent
   for (let pass = 0; pass < 2; pass++) {
     const na = a.slice(), nr = r.slice(), ng = g.slice(), nb = b.slice();
     for (let v = 0; v < S; v++) {
@@ -1690,8 +1811,6 @@ function memoryThumbFromSamples(samples) {
     }
     a.set(na); r.set(nr); g.set(ng); b.set(nb);
   }
-  // One alpha-aware 3x3 smoothing pass on RGB (denoise without bleeding
-  // colors past the silhouette)
   {
     const nr = r.slice(), ng = g.slice(), nb = b.slice();
     for (let v = 0; v < S; v++) {
@@ -1714,45 +1833,91 @@ function memoryThumbFromSamples(samples) {
     }
     r.set(nr); g.set(ng); b.set(nb);
   }
-  // Write rows flipped vertically (END-text recipe: plane shows the canvas
-  // upside down, so we pre-flip)
-  const canvas = document.createElement('canvas');
-  canvas.width = S; canvas.height = S;
-  const ctx = canvas.getContext('2d');
-  const imgData = ctx.createImageData(S, S);
-  for (let v = 0; v < S; v++) {
-    const src = v * S, dst = (S - 1 - v) * S;
-    for (let u = 0; u < S; u++) {
-      const i = src + u, o = (dst + u) * 4;
-      imgData.data[o] = Math.round(clamp01(r[i]) * 255);
-      imgData.data[o + 1] = Math.round(clamp01(g[i]) * 255);
-      imgData.data[o + 2] = Math.round(clamp01(b[i]) * 255);
-      imgData.data[o + 3] = a[i] > 0 ? 235 : 0;
-    }
-  }
-  ctx.putImageData(imgData, 0, 0);
-  return canvas;
+  return memoryCanvasesFromArrays(r, g, b, a, S);
 }
 
 function memoryThumbFromImage(img) {
-  const S = MEMORY_THUMB_S;
-  const canvas = document.createElement('canvas');
-  canvas.width = S; canvas.height = S;
-  const ctx = canvas.getContext('2d');
-  // fit inside, transparent letterbox, vertical flip (END-text recipe)
+  const S = MEMORY_THUMB_S, N = S * S;
+  // Draw fit-inside, then hand the pixels to the same canvas builder so
+  // images get the identical soft edge / glow / avg treatment
+  const tmp = document.createElement('canvas');
+  tmp.width = S; tmp.height = S;
+  const tctx = tmp.getContext('2d', { willReadFrequently: true });
   const scale = Math.min(S / img.width, S / img.height);
   const dw = img.width * scale, dh = img.height * scale;
-  ctx.translate(0, S);
-  ctx.scale(1, -1);
-  ctx.drawImage(img, (S - dw) / 2, (S - dh) / 2, dw, dh);
-  return canvas;
+  tctx.drawImage(img, (S - dw) / 2, (S - dh) / 2, dw, dh);
+  const d = tctx.getImageData(0, 0, S, S).data;
+  const r = new Float32Array(N), g = new Float32Array(N), b = new Float32Array(N), a = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    if (d[i * 4 + 3] > 10) {
+      r[i] = d[i * 4] / 255; g[i] = d[i * 4 + 1] / 255; b[i] = d[i * 4 + 2] / 255; a[i] = 1;
+    }
+  }
+  return memoryCanvasesFromArrays(r, g, b, a, S);
+}
+
+function memoryChime(k) {
+  if (!memoryChimeEnabled) return;
+  if (!audioCtx || audioCtx.state !== 'running') return;
+  try {
+    const scale = [1, 9/8, 5/4, 3/2, 5/3];
+    const f = 660 * scale[k % scale.length] * (k % 10 >= 5 ? 2 : 1) * 0.5;
+    const t = audioCtx.currentTime;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.035, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    gain.connect(audioCtx.destination);
+    [1, 2.756].forEach((mult, oi) => {
+      const osc = audioCtx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = f * mult;
+      const og = audioCtx.createGain();
+      og.gain.value = oi === 0 ? 1 : 0.3;
+      osc.connect(og); og.connect(gain);
+      osc.start(t); osc.stop(t + 1.0);
+    });
+  } catch(e){}
+}
+
+function memoryRecallAmbient() {
+  // The sky becomes a gradient woven from every memory's average color
+  if (!bgAmbientEnabled || !bgTexture || !memoryPanels.length) return;
+  try {
+    const stops = memoryPanels.map(p => p.avg).filter(Boolean);
+    if (!stops.length) return;
+    stops.sort((p, q) => (p.r * 0.3 + p.g * 0.6 + p.b * 0.1) - (q.r * 0.3 + q.g * 0.6 + q.b * 0.1));
+    const canvas = document.createElement('canvas');
+    canvas.width = BG_EQ_W; canvas.height = BG_EQ_H;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(BG_EQ_W, BG_EQ_H);
+    for (let v = 0; v < BG_EQ_H; v++) {
+      const t = 1 - v / (BG_EQ_H - 1); // darkest at the bottom
+      const fpos = t * (stops.length - 1);
+      const i0 = Math.floor(fpos), i1 = Math.min(stops.length - 1, i0 + 1);
+      const ft = fpos - i0;
+      const cr = (stops[i0].r * (1 - ft) + stops[i1].r * ft) * 0.85;
+      const cg = (stops[i0].g * (1 - ft) + stops[i1].g * ft) * 0.85;
+      const cb = (stops[i0].b * (1 - ft) + stops[i1].b * ft) * 0.85;
+      for (let u = 0; u < BG_EQ_W; u++) {
+        const o = (v * BG_EQ_W + u) * 4;
+        img.data[o] = Math.round(clamp01(cr) * 255);
+        img.data[o + 1] = Math.round(clamp01(cg) * 255);
+        img.data[o + 2] = Math.round(clamp01(cb) * 255);
+        img.data[o + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    bgTexture.setSource(canvas);
+    bgHasTexture = true;
+    applyBgAmbientVisibility();
+  } catch(e) { console.warn('recall ambient:', e); }
 }
 
 function createMemoryLane() {
   if (!app || memoryGroup) return;
   const entries = [];
   for (let i = 0; i < splatFiles.length; i++) {
-    if (memoryThumbs[i]) entries.push(memoryThumbs[i]);
+    if (memoryThumbs[i] && memoryThumbs[i].sharp) entries.push(memoryThumbs[i]);
   }
   if (!entries.length) return;
   let chosen = entries;
@@ -1762,77 +1927,256 @@ function createMemoryLane() {
   }
   memoryGroup = new Entity('memory-lane');
   app.root.addChild(memoryGroup);
+  memoryGroupYaw = 0;
   const n = chosen.length;
-  const twoRows = n > 14;
-  const step = 360 / (twoRows ? Math.ceil(n / 2) : n);
-  chosen.forEach((canvas, k) => {
+  // Chronological rising spiral: first memory low, time winds upward.
+  // The last (most recent) memory ends dead ahead.
+  const perTurn = Math.min(18, Math.max(8, n));
+  const step = 360 / perTurn;
+  let delay = 0.8;
+  chosen.forEach((thumb, k) => {
     try {
-      const tex = new Texture(app.graphicsDevice, {
-        width: canvas.width, height: canvas.height,
-        format: PIXELFORMAT_RGBA8, mipmaps: false,
-        addressU: ADDRESS_CLAMP_TO_EDGE, addressV: ADDRESS_CLAMP_TO_EDGE,
-        minFilter: FILTER_LINEAR, magFilter: FILTER_LINEAR
-      });
-      tex.setSource(canvas);
-      const mat = new StandardMaterial();
-      mat.emissive = new Color(1, 1, 1);
-      mat.emissiveMap = tex;
-      mat.opacityMap = tex; // alpha channel: transparent padding
-      mat.diffuse = new Color(0, 0, 0);
-      mat.useLighting = false;
-      mat.opacity = 0;
-      mat.blendType = BLEND_NORMAL;
-      mat.cull = CULLFACE_NONE;
-      mat.depthWrite = false;
-      mat.update();
-      // Pivot yaw + child panel placed exactly like the END text
-      // (proven orientation: plane euler(-90,0,0) facing the viewer)
-      const row = twoRows ? (k % 2) : 0;
-      const baseY = twoRows ? (row ? 2.0 : 1.2) : 1.55;
-      const yawDeg = (twoRows ? Math.floor(k / 2) : k) * step + (row ? step / 2 : 0);
+      const mkTex = canvas => {
+        const t = new Texture(app.graphicsDevice, {
+          width: canvas.width, height: canvas.height,
+          format: PIXELFORMAT_RGBA8, mipmaps: false,
+          addressU: ADDRESS_CLAMP_TO_EDGE, addressV: ADDRESS_CLAMP_TO_EDGE,
+          minFilter: FILTER_LINEAR, magFilter: FILTER_LINEAR
+        });
+        t.setSource(canvas);
+        return t;
+      };
+      const sharpTex = mkTex(thumb.sharp);
+      const glowTex = mkTex(thumb.blur);
+      const mainMat = new StandardMaterial();
+      mainMat.emissive = new Color(1, 1, 1);
+      mainMat.emissiveMap = sharpTex;
+      mainMat.opacityMap = sharpTex;
+      mainMat.diffuse = new Color(0, 0, 0);
+      mainMat.useLighting = false;
+      mainMat.opacity = 0;
+      mainMat.blendType = BLEND_NORMAL;
+      mainMat.cull = CULLFACE_NONE;
+      mainMat.depthWrite = false;
+      mainMat.update();
+      const glowMat = new StandardMaterial();
+      glowMat.emissive = new Color(1, 1, 1);
+      glowMat.emissiveMap = glowTex;
+      glowMat.diffuse = new Color(0, 0, 0);
+      glowMat.useLighting = false;
+      glowMat.opacity = 0;
+      glowMat.blendType = BLEND_ADDITIVEALPHA;
+      glowMat.cull = CULLFACE_NONE;
+      glowMat.depthWrite = false;
+      glowMat.update();
+      const frac = n > 1 ? k / (n - 1) : 0;
+      const yawDeg = (k - (n - 1)) * step;
+      const baseY = 1.15 + frac * 1.25;
+      const radius = 2.7 + frac * 0.7;
+      const size = 0.85 * (1 + 0.08 * Math.sin(k * 2.399));
       const pivot = new Entity();
       pivot.setLocalEulerAngles(0, yawDeg, 0);
+      const holder = new Entity();
+      holder.setLocalPosition(0, baseY, -radius);
       const panel = new Entity();
-      panel.addComponent('render', { type: 'plane', material: mat });
+      panel.addComponent('render', { type: 'plane', material: mainMat });
       panel.setLocalEulerAngles(-90, 0, 0);
-      panel.setLocalPosition(0, baseY, -MEMORY_RADIUS);
-      panel.setLocalScale(0.8, 1, 0.8);
-      pivot.addChild(panel);
+      panel.setLocalScale(size, 1, size);
+      const glow = new Entity();
+      glow.addComponent('render', { type: 'plane', material: glowMat });
+      glow.setLocalEulerAngles(-90, 0, 0);
+      glow.setLocalScale(size * 1.7, 1, size * 1.7);
+      glow.setLocalPosition(0, 0, -0.06); // just behind the panel
+      holder.addChild(glow);
+      holder.addChild(panel);
+      pivot.addChild(holder);
       memoryGroup.addChild(pivot);
-      memoryPanels.push({ mat, panel, tex, baseY, delay: 0.5 + k * 0.18 });
+      // Accelerando: slow first ignitions, quickening — the newest memory
+      // waits a beat before lighting up in front
+      const gap = Math.max(0.13, 0.55 * Math.pow(0.9, k));
+      delay += gap;
+      if (k === n - 1) delay += 1.2;
+      memoryPanels.push({
+        mainMat, glowMat, panel, glow, holder, pivot,
+        sharpTex, glowTex, avg: thumb.avg,
+        baseY, radius, size, yawDeg, delay,
+        phase: Math.random() * Math.PI * 2,
+        focus: 0, lit: false, conv: null
+      });
     } catch(e) { console.warn('memory panel failed:', e); }
   });
+  memoryPhase = 'in';
+  memoryFinaleRequested = false;
 }
 
 function startMemoryLane() {
   if (!memoryGroup || !memoryPanels.length) return;
   memoryActive = true;
   memoryStartAt = performance.now();
+  memoryPhase = 'in';
+  memoryPrevParticleBright = particleBright;
+  particleBright = Math.min(2, particleBright * 1.3);
+  memoryRecallAmbient();
+}
+
+function memoryRequestFinale() {
+  if (memoryPhase === 'in' || memoryPhase === 'float') memoryFinaleRequested = true;
+}
+
+function memoryBeginConverge() {
+  memoryPhase = 'converge';
+  memoryConvergeAt = performance.now();
+  // Convergence target in front of the viewer, expressed per panel in its
+  // own pivot-local space (group yaw + pivot yaw are pure Y rotations)
+  const T = { x: 0, y: 1.5, z: -1.6 };
+  for (const p of memoryPanels) {
+    const total = (memoryGroupYaw + p.yawDeg) * Math.PI / 180;
+    const c = Math.cos(-total), si = Math.sin(-total);
+    p.conv = {
+      sx: p.holder.getLocalPosition().x, sy: p.holder.getLocalPosition().y, sz: p.holder.getLocalPosition().z,
+      tx: c * T.x + si * T.z, ty: T.y, tz: -si * T.x + c * T.z
+    };
+  }
+  // Central orb
+  try {
+    const mat = new StandardMaterial();
+    const avg = memoryPanels.reduce((acc, p) => ({ r: acc.r + p.avg.r, g: acc.g + p.avg.g, b: acc.b + p.avg.b }), { r: 0, g: 0, b: 0 });
+    const m = memoryPanels.length;
+    mat.emissive = new Color(Math.min(1, avg.r / m + 0.35), Math.min(1, avg.g / m + 0.35), Math.min(1, avg.b / m + 0.35));
+    mat.diffuse = new Color(0, 0, 0);
+    mat.useLighting = false;
+    mat.opacity = 0;
+    mat.blendType = BLEND_ADDITIVEALPHA;
+    mat.depthWrite = false;
+    mat.update();
+    memoryOrb = new Entity('memory-orb');
+    memoryOrb.addComponent('render', { type: 'sphere', material: mat });
+    memoryOrb.setLocalScale(0.18, 0.18, 0.18);
+    memoryOrb.setPosition(0, 1.5, -1.6);
+    app.root.addChild(memoryOrb);
+    memoryOrbMat = mat;
+  } catch(e){}
 }
 
 function updateMemoryLane(dt) {
   if (!memoryActive || !memoryGroup) return;
-  memoryGroup.rotate(0, dt * 0.6, 0); // very slow drift; disposed with the lane
-  const t = (performance.now() - memoryStartAt) / 1000;
-  for (const p of memoryPanels) {
-    const lt = Math.max(0, Math.min(1, (t - p.delay) / 0.9));
-    if (lt <= 0) continue;
-    if (lt >= 1 && p.mat.opacity >= 0.95) continue;
-    const ease = lt * lt * (3 - 2 * lt);
-    p.mat.opacity = ease * 0.95;
-    p.mat.update();
-    p.panel.setLocalPosition(0, p.baseY - (1 - ease) * 0.08, -MEMORY_RADIUS);
-    const sc = 0.8 * (0.92 + 0.08 * ease);
-    p.panel.setLocalScale(sc, 1, sc);
+  const now = performance.now();
+  const t = (now - memoryStartAt) / 1000;
+  const smooth = x => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
+
+  if (memoryPhase === 'in' || memoryPhase === 'float') {
+    memoryGroupYaw += dt * 0.5;
+    memoryGroup.setLocalEulerAngles(0, memoryGroupYaw, 0);
+    // Gaze: which panel is the viewer looking at?
+    let bestIdx = -1, bestDot = 0.982; // ~11 degrees
+    if (cameraEntity) {
+      const fwd = cameraEntity.forward;
+      const cam = cameraEntity.getPosition();
+      for (let i = 0; i < memoryPanels.length; i++) {
+        const p = memoryPanels[i];
+        if (!p.lit) continue;
+        const wp = p.holder.getPosition();
+        const dx = wp.x - cam.x, dy = wp.y - cam.y, dz = wp.z - cam.z;
+        const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+        const dot = (dx * fwd.x + dy * fwd.y + dz * fwd.z) / len;
+        if (dot > bestDot) { bestDot = dot; bestIdx = i; }
+      }
+    }
+    let allLit = true;
+    memoryPanels.forEach((p, i) => {
+      // Ignition: a blob of light that resolves into focus
+      const lt = (t - p.delay) / 1.5;
+      if (lt <= 0) { allLit = false; return; }
+      if (!p.lit && lt > 0) { p.lit = true; memoryChime(i); }
+      const glowIn = smooth(lt / 0.5);
+      const focusIn = smooth((lt - 0.35) / 0.65);
+      if (lt < 1.2) allLit = false;
+      // Gaze response
+      const want = i === bestIdx ? 1 : 0;
+      p.focus += (want - p.focus) * Math.min(1, dt * 4);
+      const f = p.focus;
+      const baseGlow = 0.85 * glowIn - 0.5 * focusIn; // bright blob settles down
+      const newGlow = Math.max(0.2 * glowIn, baseGlow) + 0.25 * f;
+      const newMain = 0.95 * focusIn;
+      if (Math.abs(newGlow - p.glowMat.opacity) > 0.004) { p.glowMat.opacity = newGlow; p.glowMat.update(); }
+      if (Math.abs(newMain - p.mainMat.opacity) > 0.004) { p.mainMat.opacity = newMain; p.mainMat.update(); }
+      const eb = 1 + 0.45 * f;
+      if (Math.abs(eb - p.mainMat.emissive.r) > 0.01) { p.mainMat.emissive = new Color(eb, eb, eb); p.mainMat.update(); }
+      // Floating + drift closer under gaze
+      const bob = Math.sin(t * 0.45 + p.phase) * 0.025;
+      p.holder.setLocalPosition(0, p.baseY + bob + (1 - smooth(lt)) * -0.1, -(p.radius - 0.5 * f));
+      const sc = p.size * (0.8 + 0.2 * smooth(lt)) * (1 + 0.18 * f);
+      p.panel.setLocalScale(sc, 1, sc);
+      p.panel.setLocalEulerAngles(-90, 0, Math.sin(t * 0.3 + p.phase) * 1.6);
+      p.glow.setLocalScale(sc * 1.7, 1, sc * 1.7);
+    });
+    if (memoryPhase === 'in' && allLit) { memoryPhase = 'float'; memoryFloatAt = now; }
+    const floatFor = memoryPhase === 'float' ? (now - memoryFloatAt) / 1000 : 0;
+    if (memoryFinaleRequested || floatFor > MEMORY_FLOAT_SECONDS) memoryBeginConverge();
+    return;
+  }
+
+  if (memoryPhase === 'converge') {
+    const ct = (now - memoryConvergeAt) / 1000;
+    let done = true;
+    memoryPanels.forEach((p, i) => {
+      const lt = (ct - i * 0.025) / 2.8;
+      if (lt < 1) done = false;
+      const e = smooth(lt);
+      if (!p.conv) return;
+      p.holder.setLocalPosition(
+        p.conv.sx + (p.conv.tx - p.conv.sx) * e,
+        p.conv.sy + (p.conv.ty - p.conv.sy) * e,
+        p.conv.sz + (p.conv.tz - p.conv.sz) * e
+      );
+      const sc = p.size * (1 - 0.85 * e);
+      p.panel.setLocalScale(Math.max(0.01, sc), 1, Math.max(0.01, sc));
+      p.glow.setLocalScale(Math.max(0.01, sc * 1.7), 1, Math.max(0.01, sc * 1.7));
+      const fade = Math.max(0, 1 - e * 1.15);
+      p.mainMat.opacity = 0.95 * fade; p.mainMat.update();
+      p.glowMat.opacity = 0.4 * fade; p.glowMat.update();
+    });
+    if (memoryOrbMat) {
+      memoryOrbMat.opacity = Math.min(0.9, smooth(ct / 2.4) * 0.9);
+      memoryOrbMat.update();
+      const pulse = 0.18 * (1 + 0.15 * Math.sin(ct * 3));
+      memoryOrb.setLocalScale(pulse, pulse, pulse);
+    }
+    if (done) { memoryPhase = 'fadeout'; memoryConvergeAt = now; }
+    return;
+  }
+
+  if (memoryPhase === 'fadeout') {
+    const ft = (now - memoryConvergeAt) / 1000;
+    if (memoryOrbMat) {
+      const e = smooth(ft / 1.6);
+      memoryOrbMat.opacity = 0.9 * (1 - e);
+      memoryOrbMat.update();
+      const sc = 0.18 * (1 + e * 0.6);
+      memoryOrb.setLocalScale(sc, sc, sc);
+    }
+    if (ft > 1.7) {
+      const wantEnd = showEnd && endTextEntity;
+      disposeMemoryLane();
+      if (wantEnd) showEndText();
+    }
   }
 }
 
 function disposeMemoryLane() {
   memoryActive = false;
-  memoryPanels.forEach(p => { try { p.tex.destroy(); } catch(e){} });
+  memoryPhase = 'idle';
+  memoryFinaleRequested = false;
+  if (memoryPrevParticleBright !== null) { particleBright = memoryPrevParticleBright; memoryPrevParticleBright = null; }
+  memoryPanels.forEach(p => {
+    try { p.sharpTex.destroy(); } catch(e){}
+    try { p.glowTex.destroy(); } catch(e){}
+  });
   memoryPanels = [];
   if (memoryGroup) { try { memoryGroup.destroy(); } catch(e){} }
   memoryGroup = null;
+  if (memoryOrb) { try { memoryOrb.destroy(); } catch(e){} }
+  memoryOrb = null; memoryOrbMat = null;
 }
 
 async function updateAmbientBackground(file) {
@@ -2305,7 +2649,10 @@ function setupXR() {
       if (!inVR) return;
       if (handTrackingActive) return;
       if (inputSource && inputSource.hand) return;
-      if (!isRunning) { startSlideshowVR(); return; }
+      if (!isRunning) {
+        if (memoryActive) { memoryRequestFinale(); return; }
+        startSlideshowVR(); return;
+      }
       if (isLoading) return;
       // Left trigger: previous, Right trigger: next
       const handedness = inputSource.handedness;
@@ -2666,8 +3013,8 @@ function scheduleNext() {
       }
       if (showEnd || (memoryLaneEnabled && memoryGroup)) {
         await fadeTo(0, fadeTimeMs);
-        if (showEnd) showEndText();
-        if (memoryLaneEnabled) startMemoryLane();
+        if (memoryGroup) startMemoryLane(); // END text appears after the finale
+        else if (showEnd) showEndText();
       }
       isRunning = false;
       progressBarEl.style.width = '0%';
@@ -2835,6 +3182,7 @@ $('download-config-btn').addEventListener('click', () => {
       music: $('repeat-music').checked,
       showEnd: $('show-end').checked,
       memoryLane: $('memory-lane').checked,
+      memoryChime: $('memory-chime').checked,
       endColor: $('end-color').value,
       endOffsetX: parseFloat($('end-ox').value),
       endOffsetY: parseFloat($('end-oy').value),
