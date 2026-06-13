@@ -187,7 +187,7 @@
   <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="title">▸ WebXR / Gaussian Splatting</div>
-      <span class="version">v4.9</span>
+      <span class="version">v4.9.1</span>
     </div>
     <h1 class="heading">3DGS <span class="acc">SLIDESHOW</span></h1>
     <p class="subheading">Quest 3 VRスライドショー</p>
@@ -2442,6 +2442,7 @@ async function enterVRSetup() {
 }
 
 async function startSlideshowVR() {
+  endSequenceRunning = false;
   isRunning = true; isPaused = false;
   setParticlesVisible(particlesEnabled); // END後の再開時に復帰
   startAudio();
@@ -2455,7 +2456,12 @@ async function startSlideshowVR() {
   scheduleNext();
 }
 
+let endSequenceRunning = false;
 async function runEndSequence() {
+  if (endSequenceRunning) return; // guard against trigger spam during fades
+  endSequenceRunning = true;
+  isRunning = false; // stop the timer path and block manualAdvance immediately
+  clearTimeout(timer); cancelAnimationFrame(progressRAF);
   showToast(`END sequence: showEnd=${showEnd}`, 'info');
   await fadeTo(1, fadeTimeMs);
   disposeCurrentSplat();
@@ -2471,6 +2477,7 @@ async function runEndSequence() {
   isRunning = false;
   progressBarEl.style.width = '0%';
   nextTimerEl.textContent = '--s';
+  endSequenceRunning = false;
 }
 
 function scheduleNext() {
@@ -2527,6 +2534,7 @@ async function restartSlideshow() {
   isPaused = false;
   isRunning = false;
   isLoading = false;
+  endSequenceRunning = false;
   loadingEl.classList.remove('show');
   onFadeComplete = null;
   // Fully stop audio
@@ -2556,6 +2564,7 @@ async function restartSlideshow() {
 
 function endSlideshow() {
   isRunning = false; isPaused = false; isLoading = false;
+  endSequenceRunning = false;
   loadingEl.classList.remove('show');
   clearTimeout(timer); cancelAnimationFrame(progressRAF);
   onFadeComplete = null; fadeOpacity = 0; fadeTarget = 0; applyFadeOpacity();
